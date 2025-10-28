@@ -1,0 +1,56 @@
+namespace: community
+name: globus
+version: 1.0.0
+readme: README.md
+authors:
+  - Ansible Globus Collection Contributors
+
+description: >
+  Ansible collection for managing Globus infrastructure including endpoints,
+  collections, groups, compute endpoints, and workflows. Supports both Globus CLI
+  and client credentials authentication methods for comprehensive Globus Connect
+  Server automation.
+
+license:
+  - Apache-2.0
+
+tags:
+  - globus
+  - data_transfer
+  - research_computing
+  - hpc
+  - cloud
+  - storage
+  - automation
+  - infrastructure
+
+dependencies: {}
+
+repository: https://github.com/your-org/ansible-globus
+documentation: https://github.com/your-org/ansible-globus/blob/main/README.md
+homepage: https://github.com/your-org/ansible-globus
+issues: https://github.com/your-org/ansible-globus/issues
+
+# Build ignore patterns
+build_ignore:
+  - "*.pyc"
+  - "*.retry"
+  - ".git"
+  - ".gitignore"
+  - ".tox"
+  - "__pycache__"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - ".venv"
+  - "venv"
+  - ".DS_Store"
+  - "Thumbs.db"
+  - ".coverage"
+  - "htmlcov"
+  - "*.log"
+  - ".ansible"
+  - "uv.lock"
+  - "bandit-report.json"
+  - "build"
+  - "dist"
+  - "TESTING_GUIDE.md"  # Internal development file

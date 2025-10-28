@@ -1,0 +1,214 @@
+---
+# Ansible playbook to set up S3 token storage infrastructure for CI/CD
+#
+# Usage:
+#   # Create infrastructure
+#   ansible-playbook infra/setup-token-storage.yml
+#
+#   # Destroy infrastructure
+#   ansible-playbook infra/setup-token-storage.yml -e "state=absent"
+#
+# Required variables (set in vars or -e):
+#   - github_org: Your GitHub organization/username
+#   - github_repo: Repository name (default: ansible-globus)
+#   - aws_region: AWS region (default: us-east-1)
+#   - env_name: Environment name (default: ci)
+
+- name: Setup Globus Token Storage Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    state: "{{ infra_state | default('present') }}"
+    github_org: "{{ lookup('env', 'GITHUB_ORG') | default('your-org', true) }}"
+    github_repo: "{{ lookup('env', 'GITHUB_REPO') | default('ansible-globus', true) }}"
+    aws_region: "{{ lookup('env', 'AWS_REGION') | default('us-east-1', true) }}"
+    env_name: "{{ lookup('env', 'ENVIRONMENT') | default('ci', true) }}"
+
+    # Derived variables
+    bucket_name: "{{ github_org }}-{{ github_repo }}-globus-tokens-{{ env_name }}"
+    iam_role_name: "GitHubActions-{{ github_repo }}-{{ env_name }}"
+    token_key: "globus/{{ env_name }}-tokens.json"
+
+  tasks:
+    # ==================================================================
+    # Safety Check - Verify AWS Account
+    # ==================================================================
+
+    - name: Get current AWS account information
+      amazon.aws.aws_caller_info:
+      register: aws_account
+
+    - name: Display AWS account information
+      debug:
+        msg:
+          - "🔐 AWS Account Verification"
+          - "Account ID: {{ aws_account.account }}"
+          - "User/Role ARN: {{ aws_account.arn }}"
+          - "User ID: {{ aws_account.user_id }}"
+
+    - name: Prompt for confirmation (when not in CI)
+      pause:
+        prompt: |
+
+          ⚠️  You are about to {{ state }} infrastructure in:
+
+          AWS Account: {{ aws_account.account }}
+          ARN: {{ aws_account.arn }}
+
+          Continue? [yes/no]
+      register: confirm
+      when:
+        - lookup('env', 'CI') == ''
+        - lookup('env', 'SKIP_CONFIRM') == ''
+
+    - name: Verify confirmation
+      assert:
+        that:
+          - confirm.user_input == 'yes'
+        fail_msg: "Deployment cancelled by user"
+      when:
+        - lookup('env', 'CI') == ''
+        - lookup('env', 'SKIP_CONFIRM') == ''
+
+    - name: Display configuration
+      debug:
+        msg:
+          - "State: {{ state }}"
+          - "GitHub: {{ github_org }}/{{ github_repo }}"
+          - "Bucket: {{ bucket_name }}"
+          - "IAM Role: {{ iam_role_name }}"
+          - "Region: {{ aws_region }}"
+
+    # ==================================================================
+    # S3 Bucket for Token Storage
+    # ==================================================================
+
+    - name: Create/Delete S3 bucket for Globus tokens
+      amazon.aws.s3_bucket:
+        name: "{{ bucket_name }}"
+        state: "{{ state }}"
+        region: "{{ aws_region }}"
+        encryption: AES256
+        versioning: true
+        public_access:
+          block_public_acls: true
+          block_public_policy: true
+          ignore_public_acls: true
+          restrict_public_buckets: true
+        tags:
+          Project: ansible-globus
+          Purpose: globus-oauth-token-storage
+          Environment: "{{ env_name }}"
+          ManagedBy: ansible
+      register: s3_bucket
+
+    # ==================================================================
+    # GitHub Actions OIDC Provider (if not exists)
+    # ==================================================================
+
+    - name: Check if GitHub OIDC provider exists
+      ansible.builtin.command:
+        cmd: aws iam list-open-id-connect-providers
+      register: oidc_list
+      changed_when: false
+      failed_when: false
+      when: state == "present"
+
+    - name: Parse OIDC provider list
+      ansible.builtin.set_fact:
+        github_oidc_exists: "{{ (oidc_list.stdout | from_json).OpenIDConnectProviderList | selectattr('Arn', 'search', 'token.actions.githubusercontent.com') | list | length > 0 }}"
+      when: state == "present"
+
+    - name: Create GitHub OIDC provider
+      ansible.builtin.shell:
+        cmd: >
+          aws iam create-open-id-connect-provider
+          --url https://token.actions.githubusercontent.com
+          --client-id-list sts.amazonaws.com
+          --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+          --tags Key=ManagedBy,Value=ansible Key=Purpose,Value=github-actions-oidc
+      when:
+        - state == "present"
+        - not github_oidc_exists
+      register: oidc_created
+
+    # ==================================================================
+    # IAM Role for GitHub Actions
+    # ==================================================================
+
+    - name: Create/Delete IAM role for GitHub Actions
+      amazon.aws.iam_role:
+        name: "{{ iam_role_name }}"
+        state: "{{ state }}"
+        assume_role_policy_document: "{{ lookup('template', 'templates/github-trust-policy.json.j2') }}"
+        description: "Role for GitHub Actions to access Globus token storage"
+        managed_policies:
+          - arn:aws:iam::aws:policy/ReadOnlyAccess  # For reading S3
+        tags:
+          Project: ansible-globus
+          GitHub: "{{ github_org }}/{{ github_repo }}"
+          Environment: "{{ env_name }}"
+          ManagedBy: ansible
+      register: iam_role
+
+    - name: Create/Delete inline policy for S3 token access
+      amazon.aws.iam_policy:
+        iam_type: role
+        iam_name: "{{ iam_role_name }}"
+        policy_name: S3TokenStorageAccess
+        state: "{{ state }}"
+        policy_json: "{{ lookup('template', 'templates/s3-access-policy.json.j2') }}"
+      when: state == "present"
+
+    # ==================================================================
+    # S3 Bucket Policy
+    # ==================================================================
+
+    - name: Set S3 bucket policy
+      amazon.aws.s3_bucket:
+        name: "{{ bucket_name }}"
+        state: "{{ state }}"
+        policy: "{{ lookup('template', 'templates/bucket-policy.json.j2') }}"
+      when: state == "present"
+
+    # ==================================================================
+    # Summary
+    # ==================================================================
+
+    - name: Display setup summary
+      debug:
+        msg:
+          - "✅ Infrastructure {{ state }} complete!"
+          - ""
+          - "S3 Bucket: {{ bucket_name }}"
+          - "Token Path: s3://{{ bucket_name }}/{{ token_key }}"
+          - "IAM Role ARN: arn:aws:iam::{{ aws_account.account }}:role/{{ iam_role_name }}"
+          - ""
+          - "Next steps:"
+          - "1. Run: python scripts/setup_oauth_tokens.py \\"
+          - "     --bucket {{ bucket_name }} \\"
+          - "     --key {{ token_key }} \\"
+          - "     --namespace {{ env_name }} \\"
+          - "     --environment test"
+          - ""
+          - "2. Add to GitHub Secrets:"
+          - "   AWS_ROLE_ARN=arn:aws:iam::{{ aws_account.account }}:role/{{ iam_role_name }}"
+          - "   S3_TOKEN_BUCKET={{ bucket_name }}"
+          - "   S3_TOKEN_KEY={{ token_key }}"
+          - "   S3_TOKEN_NAMESPACE={{ env_name }}"
+          - "   AWS_REGION={{ aws_region }}"
+      when: state == "present"
+
+    - name: Display cleanup summary
+      debug:
+        msg:
+          - "✅ Infrastructure cleanup complete!"
+          - ""
+          - "Removed:"
+          - "  - S3 Bucket: {{ bucket_name }}"
+          - "  - IAM Role: {{ iam_role_name }}"
+          - ""
+          - "Note: OIDC provider left in place (may be used by other repos)"
+      when: state == "absent"

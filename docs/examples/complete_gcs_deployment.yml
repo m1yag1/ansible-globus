@@ -1,0 +1,218 @@
+---
+# Complete Globus Connect Server Deployment Example
+# This playbook demonstrates a full GCS deployment with multiple collections
+
+- name: Deploy Complete Globus Connect Server Infrastructure
+  hosts: globus_servers
+  become: yes
+  vars:
+    gcs_config:
+      endpoint_name: "{{ inventory_hostname }}-research-endpoint"
+      organization: "University Research Computing"
+      contact_email: "research-admin@university.edu"
+      subscription_id: "your-subscription-id"
+
+    collections:
+      - name: "Home Directories"
+        path: "/home"
+        type: "mapped"
+        public: false
+        description: "User home directories"
+      - name: "Shared Research Data"
+        path: "/data/shared"
+        type: "mapped"
+        public: true
+        description: "Collaborative research datasets"
+        keywords:
+          - "research"
+          - "collaboration"
+      - name: "Project Archive"
+        path: "/archive/projects"
+        type: "mapped"
+        public: false
+        description: "Long-term project storage"
+
+    research_groups:
+      - name: "physics-research"
+        description: "Physics Research Group"
+        members:
+          - "physicist1@university.edu"
+          - "physicist2@university.edu"
+        admins:
+          - "physics-pi@university.edu"
+      - name: "biology-research"
+        description: "Biology Research Group"
+        members:
+          - "biologist1@university.edu"
+          - "biologist2@university.edu"
+        admins:
+          - "biology-pi@university.edu"
+
+  pre_tasks:
+    - name: Update system packages
+      package:
+        name: "*"
+        state: latest
+      when: ansible_os_family == "RedHat"
+
+    - name: Install required packages
+      package:
+        name:
+          - python3
+          - python3-pip
+          - curl
+          - wget
+        state: present
+
+  tasks:
+    - name: Add Globus repository
+      yum_repository:
+        name: Globus-Toolkit-6
+        description: Globus Toolkit 6
+        baseurl: http://toolkit.globus.org/ftppub/gt6/installers/repo/rpm/el$releasever/$basearch/
+        gpgkey: http://toolkit.globus.org/ftppub/gt6/installers/repo/rpm/RPM-GPG-KEY-Globus
+        gpgcheck: yes
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Globus Connect Server
+      package:
+        name: globus-connect-server54
+        state: present
+
+    - name: Install Globus CLI
+      pip:
+        name: globus-cli
+        state: present
+
+    - name: Configure firewall for Globus
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - "2811/tcp"   # GridFTP control
+        - "50000-51000/tcp"  # GridFTP data
+      when: ansible_os_family == "RedHat"
+
+    - name: Create GCS endpoint
+      globus_endpoint:
+        name: "{{ gcs_config.endpoint_name }}"
+        description: "Research endpoint for {{ inventory_hostname }}"
+        organization: "{{ gcs_config.organization }}"
+        contact_email: "{{ gcs_config.contact_email }}"
+        endpoint_type: "server"
+        hostname: "{{ ansible_fqdn }}"
+        port: 2811
+        scheme: "gsiftp"
+        public: true
+        subscription_id: "{{ gcs_config.subscription_id | default(omit) }}"
+        network_use: "normal"
+        state: present
+      register: gcs_endpoint
+      delegate_to: localhost
+
+    - name: Display endpoint information
+      debug:
+        msg: "Created endpoint {{ gcs_endpoint.endpoint_id }} with name {{ gcs_endpoint.name }}"
+
+    - name: Create collections on endpoint
+      globus_collection:
+        name: "{{ item.name }}"
+        endpoint_id: "{{ gcs_endpoint.endpoint_id }}"
+        path: "{{ item.path }}"
+        collection_type: "{{ item.type }}"
+        description: "{{ item.description }}"
+        public: "{{ item.public }}"
+        keywords: "{{ item.keywords | default([]) }}"
+        organization: "{{ gcs_config.organization }}"
+        contact_email: "{{ gcs_config.contact_email }}"
+        state: present
+      loop: "{{ collections }}"
+      delegate_to: localhost
+      register: created_collections
+
+    - name: Create research groups
+      globus_group:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        visibility: "private"
+        members: "{{ item.members }}"
+        admins: "{{ item.admins }}"
+        state: present
+      loop: "{{ research_groups }}"
+      delegate_to: localhost
+      run_once: true
+      register: created_groups
+
+    - name: Create data processing compute endpoint
+      globus_compute:
+        name: "{{ inventory_hostname }}-compute"
+        description: "Compute endpoint for {{ inventory_hostname }}"
+        public: false
+        executor_type: "HighThroughputExecutor"
+        max_workers: "{{ ansible_processor_vcpus }}"
+        conda_env: "globus-compute"
+        provider:
+          type: "LocalProvider"
+          init_blocks: 1
+          max_blocks: 2
+          parallelism: 1
+        state: present
+      delegate_to: localhost
+      register: compute_endpoint
+
+    - name: Create automated data processing flow
+      globus_flow:
+        title: "{{ inventory_hostname }} Data Processing Pipeline"
+        subtitle: "Automated data processing for research"
+        description: "Process incoming research data automatically"
+        definition:
+          Comment: "Data processing pipeline"
+          StartAt: "CheckNewData"
+          States:
+            CheckNewData:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoint.endpoint_id }}"
+                function: "check_new_data"
+                function_kwargs:
+                  source_collection: "{{ created_collections.results[1].collection_id }}"
+              Next: "ProcessData"
+              Catch:
+                - ErrorEquals: ["ActionFailedException"]
+                  Next: "ProcessingFailed"
+            ProcessData:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoint.endpoint_id }}"
+                function: "process_research_data"
+              Next: "ArchiveResults"
+            ArchiveResults:
+              Type: "Action"
+              ActionUrl: "https://actions.automate.globus.org/transfer/transfer"
+              Parameters:
+                source_endpoint_id: "{{ gcs_endpoint.endpoint_id }}"
+                destination_endpoint_id: "{{ gcs_endpoint.endpoint_id }}"
+                transfer_items:
+                  - source_path: "/data/shared/processed/"
+                    destination_path: "/archive/projects/"
+                    recursive: true
+              End: true
+            ProcessingFailed:
+              Type: "Fail"
+              Cause: "Data processing pipeline failed"
+        keywords:
+          - "automation"
+          - "data-processing"
+          - "research"
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        state: present
+      delegate_to: localhost
+      when: compute_endpoint is succeeded

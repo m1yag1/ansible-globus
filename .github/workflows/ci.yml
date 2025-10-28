@@ -1,0 +1,366 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  ANSIBLE_VERSION: ">=2.16.0"
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system "ruff==0.14.2" yamllint ansible-lint mypy
+
+      - name: Run Ruff linting
+        run: ruff check plugins/ tests/
+
+      - name: Run Ruff format check
+        run: ruff format --check plugins/ tests/
+        continue-on-error: true
+
+      - name: Run type checking
+        run: mypy plugins/module_utils/
+
+      - name: Run YAML linting
+        run: |
+          yamllint docs/examples/ || true
+          yamllint .github/workflows/
+
+      - name: Run Ansible linting
+        run: |
+          ansible-lint docs/examples/ || true
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }}, SDK ${{ matrix.sdk-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+        sdk-version: ["3", "4"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install SDK v${{ matrix.sdk-version }}
+        run: |
+          if [ "${{ matrix.sdk-version }}" = "3" ]; then
+            uv pip install --system "globus-sdk>=3.0.0,<4.0.0"
+          else
+            uv pip install --system "globus-sdk>=4.0.0"
+          fi
+
+      - name: Install project dependencies
+        run: |
+          uv pip install --system -e ".[test]"
+
+      - name: Display SDK version
+        run: |
+          python -c "import globus_sdk; print(f'Testing with Globus SDK {globus_sdk.__version__}')"
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ -v --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests-sdk${{ matrix.sdk-version }}
+          name: codecov-py${{ matrix.python-version }}-sdk${{ matrix.sdk-version }}
+          fail_ci_if_error: false
+
+  integration:
+    name: Integration Tests (SDK ${{ matrix.sdk-version }})
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk-version: ["3", "4"]
+    permissions:
+      id-token: write  # Required for AWS OIDC
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install SDK v${{ matrix.sdk-version }}
+        run: |
+          if [ "${{ matrix.sdk-version }}" = "3" ]; then
+            uv pip install --system "globus-sdk>=3.0.0,<4.0.0"
+          else
+            uv pip install --system "globus-sdk>=4.0.0"
+          fi
+
+      - name: Install project dependencies
+        run: |
+          uv pip install --system -e ".[test]"
+
+      - name: Display SDK version
+        run: |
+          python -c "import globus_sdk; print(f'Testing with Globus SDK {globus_sdk.__version__}')"
+
+      - name: Build Ansible collection
+        run: |
+          ansible-galaxy collection build --force
+
+      - name: Install Ansible collection
+        run: |
+          ansible-galaxy collection install community-globus-*.tar.gz --force
+
+      - name: Run integration tests with S3 tokens
+        env:
+          S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
+          S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
+          S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
+          GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
+          GLOBUS_SDK_ENVIRONMENT: test
+        run: |
+          pytest tests/integration/ -v -rs --tb=short -m "not high_assurance"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-sdk${{ matrix.sdk-version }}
+          path: |
+            pytest-report.xml
+            htmlcov/
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit security linting
+        run: |
+          bandit -r plugins/ -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Run Safety vulnerability check
+        run: |
+          safety check --json --output safety-report.json
+        continue-on-error: true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  docs:
+    name: Documentation Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install sphinx sphinx-rtd-theme markdown
+
+      - name: Validate README
+        run: |
+          python -c "import markdown; markdown.markdown(open('README.md').read())"
+
+      - name: Check for broken links in documentation
+        run: |
+          pip install requests
+          python -c "
+          import requests
+          import re
+
+          with open('README.md', 'r') as f:
+              content = f.read()
+
+          urls = re.findall(r'https?://[^\s\)]+', content)
+          for url in urls:
+              try:
+                  response = requests.head(url, timeout=10)
+                  if response.status_code >= 400:
+                      print(f'Broken link: {url} (Status: {response.status_code})')
+              except:
+                  print(f'Could not check: {url}')
+          "
+
+  build:
+    name: Build Collection
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration]
+    if: always() && needs.lint.result == 'success' && needs.test.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ansible${{ env.ANSIBLE_VERSION }}"
+
+      - name: Create galaxy.yml
+        run: |
+          cat > galaxy.yml << EOF
+          namespace: community
+          name: globus
+          version: 1.0.0
+          readme: README.md
+          authors:
+            - "Ansible Globus Module Contributors"
+          description: "Ansible collection for managing Globus infrastructure"
+          license:
+            - "Apache-2.0"
+          license_file: LICENSE
+          tags:
+            - globus
+            - data_transfer
+            - research
+            - hpc
+          dependencies: {}
+          repository: "https://github.com/your-org/ansible-globus"
+          documentation: "https://github.com/your-org/ansible-globus/blob/main/README.md"
+          homepage: "https://github.com/your-org/ansible-globus"
+          issues: "https://github.com/your-org/ansible-globus/issues"
+          EOF
+
+      - name: Build collection
+        run: |
+          ansible-galaxy collection build
+
+      - name: Upload collection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-collection
+          path: "*.tar.gz"
+
+  deploy:
+    name: Deploy to Galaxy
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration, build]
+    if: github.event_name == 'release' && needs.integration.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ansible${{ env.ANSIBLE_VERSION }}"
+
+      - name: Download collection artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection
+
+      - name: Publish to Galaxy
+        env:
+          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          ansible-galaxy collection publish *.tar.gz --api-key $ANSIBLE_GALAXY_API_KEY
+
+  notify:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration, security, docs, build]
+    if: always()
+
+    steps:
+      - name: Notify on success
+        if: ${{ needs.lint.result == 'success' && needs.test.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
+        run: |
+          echo "✅ All checks passed successfully!"
+
+      - name: Notify on failure
+        if: ${{ needs.lint.result == 'failure' || needs.test.result == 'failure' || needs.integration.result == 'failure' }}
+        run: |
+          echo "❌ Some checks failed. Please review the logs."
+          exit 1

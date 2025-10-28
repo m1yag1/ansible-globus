@@ -1,0 +1,6 @@
+---
+# requirements.yml for your existing ansible project
+collections:
+  # Install the new Globus collection from built tarball
+  - name: /Users/blackbird/Projects/01_personal/ansible-globus/community-globus-1.0.0.tar.gz
+    type: file

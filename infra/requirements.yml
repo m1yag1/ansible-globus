@@ -1,0 +1,6 @@
+---
+# Ansible Galaxy requirements for infrastructure playbooks
+
+collections:
+  - name: amazon.aws
+    version: ">=8.0.0"

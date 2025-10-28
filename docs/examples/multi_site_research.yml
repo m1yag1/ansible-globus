@@ -1,0 +1,388 @@
+---
+# Multi-Site Research Infrastructure Example
+# Demonstrates coordinated deployment across multiple research sites
+
+- name: Deploy Multi-Site Research Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    project_name: "climate-research"
+    research_sites:
+      - name: "west-coast"
+        display_name: "West Coast Research Facility"
+        hostname: "data-west.research.edu"
+        location: "California, USA"
+        collections:
+          - name: "Atmospheric Data"
+            path: "/data/atmospheric"
+            type: "mapped"
+            public: true
+          - name: "Ocean Data"
+            path: "/data/ocean"
+            type: "mapped"
+            public: true
+
+      - name: "east-coast"
+        display_name: "East Coast Research Facility"
+        hostname: "data-east.research.edu"
+        location: "Massachusetts, USA"
+        collections:
+          - name: "Weather Stations"
+            path: "/data/weather"
+            type: "mapped"
+            public: true
+          - name: "Satellite Data"
+            path: "/data/satellite"
+            type: "mapped"
+            public: false
+
+      - name: "central"
+        display_name: "Central Processing Hub"
+        hostname: "compute-central.research.edu"
+        location: "Illinois, USA"
+        collections:
+          - name: "Processed Results"
+            path: "/data/results"
+            type: "mapped"
+            public: true
+          - name: "Archive"
+            path: "/archive"
+            type: "mapped"
+            public: false
+
+    compute_sites:
+      - site: "west-coast"
+        workers: 8
+        queue: "climate"
+      - site: "east-coast"
+        workers: 4
+        queue: "weather"
+      - site: "central"
+        workers: 16
+        queue: "analysis"
+
+    research_teams:
+      - name: "{{ project_name }}-leads"
+        description: "Climate Research Project Leaders"
+        members:
+          - "pi@research.edu"
+          - "co-pi@research.edu"
+        visibility: "private"
+
+      - name: "{{ project_name }}-analysts"
+        description: "Data Analysis Team"
+        members:
+          - "analyst1@research.edu"
+          - "analyst2@research.edu"
+          - "analyst3@research.edu"
+        visibility: "private"
+
+      - name: "{{ project_name }}-students"
+        description: "Graduate Student Researchers"
+        members:
+          - "grad1@research.edu"
+          - "grad2@research.edu"
+          - "grad3@research.edu"
+        visibility: "private"
+
+  tasks:
+    - name: Create research endpoints for each site
+      globus_endpoint:
+        name: "{{ item.display_name }}"
+        description: "Research endpoint at {{ item.location }}"
+        organization: "Climate Research Consortium"
+        contact_email: "admin@research.edu"
+        endpoint_type: "server"
+        hostname: "{{ item.hostname }}"
+        public: true
+        network_use: "aggressive"
+        state: present
+      loop: "{{ research_sites }}"
+      register: site_endpoints
+
+    - name: Create collections for each site
+      globus_collection:
+        name: "{{ outer_item.1.name }} - {{ outer_item.0.display_name }}"
+        endpoint_id: "{{ site_endpoints.results[outer_index].endpoint_id }}"
+        path: "{{ outer_item.1.path }}"
+        collection_type: "{{ outer_item.1.type }}"
+        description: "{{ outer_item.1.name }} at {{ outer_item.0.location }}"
+        public: "{{ outer_item.1.public }}"
+        organization: "Climate Research Consortium"
+        keywords:
+          - "climate"
+          - "research"
+          - "{{ outer_item.0.name }}"
+        state: present
+      loop: "{{ research_sites | subelements('collections') }}"
+      loop_control:
+        loop_var: outer_item
+        index_var: outer_index
+      register: site_collections
+
+    - name: Create compute endpoints for processing sites
+      globus_compute:
+        name: "{{ item.site }}-compute"
+        description: "Compute endpoint for {{ item.site }} site"
+        public: false
+        executor_type: "HighThroughputExecutor"
+        max_workers: "{{ item.workers }}"
+        conda_env: "climate-analysis"
+        provider:
+          type: "SlurmProvider"
+          partition: "{{ item.queue }}"
+          nodes_per_block: 2
+          init_blocks: 1
+          max_blocks: 4
+          parallelism: 0.5
+          scheduler_options: "#SBATCH --time=04:00:00\n#SBATCH --account=climate-research"
+        state: present
+      loop: "{{ compute_sites }}"
+      register: compute_endpoints
+
+    - name: Create research team groups
+      globus_group:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        visibility: "{{ item.visibility }}"
+        members: "{{ item.members }}"
+        state: present
+      loop: "{{ research_teams }}"
+      register: research_groups
+
+    - name: Create data synchronization flow
+      globus_flow:
+        title: "{{ project_name | title }} Data Synchronization"
+        subtitle: "Multi-site data synchronization and processing"
+        description: "Automatically sync and process climate data across research sites"
+        definition:
+          Comment: "Multi-site climate data processing pipeline"
+          StartAt: "SyncWestCoastData"
+          States:
+            SyncWestCoastData:
+              Type: "Action"
+              ActionUrl: "https://actions.automate.globus.org/transfer/sync"
+              Parameters:
+                source_endpoint_id: "{{ site_endpoints.results[0].endpoint_id }}"
+                destination_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                source_path: "/data/atmospheric/"
+                destination_path: "/data/sync/west-atmospheric/"
+                recursive: true
+                sync_level: 1
+              Next: "SyncEastCoastData"
+              Catch:
+                - ErrorEquals: ["ActionFailedException"]
+                  Next: "SyncFailed"
+
+            SyncEastCoastData:
+              Type: "Action"
+              ActionUrl: "https://actions.automate.globus.org/transfer/sync"
+              Parameters:
+                source_endpoint_id: "{{ site_endpoints.results[1].endpoint_id }}"
+                destination_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                source_path: "/data/weather/"
+                destination_path: "/data/sync/east-weather/"
+                recursive: true
+                sync_level: 1
+              Next: "ProcessCombinedData"
+
+            ProcessCombinedData:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoints.results[2].endpoint_id }}"
+                function: "analyze_climate_data"
+                function_kwargs:
+                  atmospheric_data: "/data/sync/west-atmospheric/"
+                  weather_data: "/data/sync/east-weather/"
+                  output_dir: "/data/results/{{ ansible_date_time.date }}/"
+              Next: "DistributeResults"
+
+            DistributeResults:
+              Type: "Parallel"
+              Branches:
+                - StartAt: "SendToWest"
+                  States:
+                    SendToWest:
+                      Type: "Action"
+                      ActionUrl: "https://actions.automate.globus.org/transfer/transfer"
+                      Parameters:
+                        source_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                        destination_endpoint_id: "{{ site_endpoints.results[0].endpoint_id }}"
+                        transfer_items:
+                          - source_path: "/data/results/{{ ansible_date_time.date }}/"
+                            destination_path: "/data/shared-results/"
+                            recursive: true
+                      End: true
+
+                - StartAt: "SendToEast"
+                  States:
+                    SendToEast:
+                      Type: "Action"
+                      ActionUrl: "https://actions.automate.globus.org/transfer/transfer"
+                      Parameters:
+                        source_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                        destination_endpoint_id: "{{ site_endpoints.results[1].endpoint_id }}"
+                        transfer_items:
+                          - source_path: "/data/results/{{ ansible_date_time.date }}/"
+                            destination_path: "/data/shared-results/"
+                            recursive: true
+                      End: true
+              Next: "ArchiveResults"
+
+            ArchiveResults:
+              Type: "Action"
+              ActionUrl: "https://actions.automate.globus.org/transfer/transfer"
+              Parameters:
+                source_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                destination_endpoint_id: "{{ site_endpoints.results[2].endpoint_id }}"
+                transfer_items:
+                  - source_path: "/data/results/{{ ansible_date_time.date }}/"
+                    destination_path: "/archive/{{ ansible_date_time.year }}/{{ ansible_date_time.month }}/"
+                    recursive: true
+              End: true
+
+            SyncFailed:
+              Type: "Fail"
+              Cause: "Data synchronization failed"
+              Error: "SyncError"
+
+        keywords:
+          - "climate"
+          - "multi-site"
+          - "automation"
+          - "research"
+        visible_to:
+          - "{{ research_groups.results[0].group_id }}"  # project leads
+        runnable_by:
+          - "{{ research_groups.results[0].group_id }}"  # project leads
+          - "{{ research_groups.results[1].group_id }}"  # analysts
+        administered_by:
+          - "{{ research_groups.results[0].group_id }}"  # project leads
+        state: present
+      register: sync_flow
+
+    - name: Create daily processing flow
+      globus_flow:
+        title: "{{ project_name | title }} Daily Processing"
+        subtitle: "Daily automated data processing"
+        description: "Process new climate data daily and generate reports"
+        definition:
+          Comment: "Daily climate data processing"
+          StartAt: "CheckForNewData"
+          States:
+            CheckForNewData:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoints.results[2].endpoint_id }}"
+                function: "check_new_climate_data"
+                function_kwargs:
+                  data_sources:
+                    - "{{ site_endpoints.results[0].endpoint_id }}"
+                    - "{{ site_endpoints.results[1].endpoint_id }}"
+                  since_hours: 24
+              Next: "ProcessNewData"
+
+            ProcessNewData:
+              Type: "Choice"
+              Choices:
+                - Variable: "$.new_data_available"
+                  BooleanEquals: true
+                  Next: "RunAnalysis"
+              Default: "NoNewData"
+
+            RunAnalysis:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoints.results[2].endpoint_id }}"
+                function: "daily_climate_analysis"
+              Next: "GenerateReport"
+
+            GenerateReport:
+              Type: "Action"
+              ActionUrl: "https://compute.api.globus.org"
+              Parameters:
+                endpoint: "{{ compute_endpoints.results[2].endpoint_id }}"
+                function: "generate_daily_report"
+                function_kwargs:
+                  output_path: "/data/reports/daily/"
+                  recipients:
+                    - "pi@research.edu"
+                    - "co-pi@research.edu"
+              End: true
+
+            NoNewData:
+              Type: "Pass"
+              Result: "No new data to process"
+              End: true
+
+        keywords:
+          - "climate"
+          - "daily"
+          - "automation"
+          - "reporting"
+        visible_to:
+          - "{{ research_groups.results[1].group_id }}"  # analysts
+        runnable_by:
+          - "{{ research_groups.results[1].group_id }}"  # analysts
+        state: present
+      register: daily_flow
+
+  post_tasks:
+    - name: Display multi-site deployment summary
+      ansible.builtin.debug:
+        msg: |
+          Multi-Site Climate Research Infrastructure Deployed!
+
+          Research Sites:
+          {% for result in site_endpoints.results %}
+          - {{ result.name }}: {{ result.endpoint_id }}
+          {% endfor %}
+
+          Collections Created: {{ site_collections.results | length }}
+          Compute Endpoints: {{ compute_endpoints.results | length }}
+          Research Groups: {{ research_groups.results | length }}
+
+          Automation Flows:
+          - Data Sync Flow: {{ sync_flow.flow_id }}
+          - Daily Processing: {{ daily_flow.flow_id }}
+
+          Next Steps:
+          1. Configure authentication across all sites
+          2. Test inter-site data transfers
+          3. Deploy analysis software on compute endpoints
+          4. Schedule daily processing flow
+          5. Set up monitoring and alerting
+
+    - name: Create site configuration file
+      ansible.builtin.copy:
+        content: |
+          # Multi-Site Climate Research Configuration
+          # Generated: {{ ansible_date_time.iso8601 }}
+
+          [project]
+          name = {{ project_name }}
+          description = Multi-site climate research infrastructure
+
+          {% for result in site_endpoints.results %}
+          [site.{{ research_sites[loop.index0].name }}]
+          endpoint_id = {{ result.endpoint_id }}
+          endpoint_name = {{ result.name }}
+          hostname = {{ research_sites[loop.index0].hostname }}
+          location = {{ research_sites[loop.index0].location }}
+
+          {% endfor %}
+
+          [flows]
+          sync_flow_id = {{ sync_flow.flow_id }}
+          daily_processing_id = {{ daily_flow.flow_id }}
+
+          [groups]
+          {% for result in research_groups.results %}
+          {{ research_teams[loop.index0].name }}_id = {{ result.group_id }}
+          {% endfor %}
+        dest: "/tmp/{{ project_name }}_config.ini"
+        mode: '0644'

@@ -78,25 +78,13 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install project dependencies
+      - name: Install tox
         run: |
-          uv pip install --system -e ".[test]"
+          uv pip install --system tox tox-uv
 
-      - name: Install SDK v${{ matrix.sdk-version }}
+      - name: Run unit tests with tox
         run: |
-          if [ "${{ matrix.sdk-version }}" = "3" ]; then
-            uv pip install --system --no-deps "globus-sdk>=3.0.0,<4.0.0"
-          else
-            uv pip install --system --no-deps "globus-sdk>=4.0.0"
-          fi
-
-      - name: Display SDK version
-        run: |
-          python -c "import globus_sdk; print(f'Testing with Globus SDK {globus_sdk.__version__}')"
-
-      - name: Run unit tests
-        run: |
-          pytest tests/unit/ -v --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/unit/ -v --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -138,21 +126,13 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install project dependencies
+      - name: Install tox
         run: |
-          uv pip install --system -e ".[test]"
+          uv pip install --system tox tox-uv
 
-      - name: Install SDK v${{ matrix.sdk-version }}
+      - name: Install Ansible for collection build
         run: |
-          if [ "${{ matrix.sdk-version }}" = "3" ]; then
-            uv pip install --system --no-deps "globus-sdk>=3.0.0,<4.0.0"
-          else
-            uv pip install --system --no-deps "globus-sdk>=4.0.0"
-          fi
-
-      - name: Display SDK version
-        run: |
-          python -c "import globus_sdk; print(f'Testing with Globus SDK {globus_sdk.__version__}')"
+          uv pip install --system ansible-core
 
       - name: Build Ansible collection
         run: |
@@ -162,7 +142,7 @@ jobs:
         run: |
           ansible-galaxy collection install community-globus-*.tar.gz --force
 
-      - name: Run integration tests with S3 tokens
+      - name: Run integration tests with tox
         env:
           S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
           S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
@@ -172,7 +152,7 @@ jobs:
           GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
           GLOBUS_SDK_ENVIRONMENT: test
         run: |
-          pytest tests/integration/ -v -rs --tb=short -m "not high_assurance"
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -v -rs --tb=short -m "not high_assurance"
 
       - name: Upload test results
         if: always()

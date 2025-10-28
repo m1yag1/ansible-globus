@@ -84,7 +84,7 @@ jobs:
 
       - name: Run unit tests with tox
         run: |
-          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/unit/ -v --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/unit/ --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -152,7 +152,7 @@ jobs:
           GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
           GLOBUS_SDK_ENVIRONMENT: test
         run: |
-          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -v -rs --tb=short -m "not high_assurance"
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance"
 
       - name: Upload test results
         if: always()

@@ -78,17 +78,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install SDK v${{ matrix.sdk-version }}
-        run: |
-          if [ "${{ matrix.sdk-version }}" = "3" ]; then
-            uv pip install --system "globus-sdk>=3.0.0,<4.0.0"
-          else
-            uv pip install --system "globus-sdk>=4.0.0"
-          fi
-
       - name: Install project dependencies
         run: |
           uv pip install --system -e ".[test]"
+
+      - name: Install SDK v${{ matrix.sdk-version }}
+        run: |
+          if [ "${{ matrix.sdk-version }}" = "3" ]; then
+            uv pip install --system --no-deps "globus-sdk>=3.0.0,<4.0.0"
+          else
+            uv pip install --system --no-deps "globus-sdk>=4.0.0"
+          fi
 
       - name: Display SDK version
         run: |
@@ -138,17 +138,17 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install SDK v${{ matrix.sdk-version }}
-        run: |
-          if [ "${{ matrix.sdk-version }}" = "3" ]; then
-            uv pip install --system "globus-sdk>=3.0.0,<4.0.0"
-          else
-            uv pip install --system "globus-sdk>=4.0.0"
-          fi
-
       - name: Install project dependencies
         run: |
           uv pip install --system -e ".[test]"
+
+      - name: Install SDK v${{ matrix.sdk-version }}
+        run: |
+          if [ "${{ matrix.sdk-version }}" = "3" ]; then
+            uv pip install --system --no-deps "globus-sdk>=3.0.0,<4.0.0"
+          else
+            uv pip install --system --no-deps "globus-sdk>=4.0.0"
+          fi
 
       - name: Display SDK version
         run: |

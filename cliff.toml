@@ -1,0 +1,167 @@
+# git-cliff configuration for Ansible Globus Collection
+# Generates changelogs following Keep a Changelog format
+# Docs: https://git-cliff.org/docs/configuration
+
+[changelog]
+# changelog header
+header = """
+# Changelog
+
+All notable changes to the Ansible Globus Collection will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+# template for the changelog body
+# https://keats.github.io/tera/docs/#introduction
+body = """
+{% if version -%}
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+    ## [Unreleased]
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}\
+          {% if commit.github.pr_number %} ([#{{ commit.github.pr_number }}]({{ commit.github.pr_number }})){% endif %}\
+    {% endfor %}
+{% endfor %}\n
+"""
+# template for the changelog footer
+footer = """
+---
+
+## Release Notes Format
+
+Each release will include:
+
+### Added
+- New features and modules
+- New configuration options
+- New documentation
+
+### Changed
+- Updates to existing functionality
+- API changes (with migration notes)
+- Documentation improvements
+
+### Deprecated
+- Features planned for removal
+- Migration instructions
+
+### Removed
+- Removed features (breaking changes)
+- Dropped support notices
+
+### Fixed
+- Bug fixes
+- Security patches
+- Performance improvements
+
+### Security
+- Security-related changes
+- Vulnerability fixes
+
+---
+
+## Contributing to Changelog
+
+When contributing, please:
+
+1. **Use conventional commits** (feat:, fix:, docs:, etc.)
+2. **Include scope** for clarity (e.g., `feat(auth): add OAuth support`)
+3. **Reference issue numbers** where applicable
+4. **Follow semantic versioning** for release planning
+
+### Conventional Commit Types
+
+- `feat`: New features → Minor version bump
+- `fix`: Bug fixes → Patch version bump
+- `docs`: Documentation changes → No version bump
+- `refactor`: Code refactoring → Patch version bump
+- `test`: Test changes → No version bump
+- `chore`: Maintenance tasks → No version bump
+- `BREAKING CHANGE`: Breaking changes → Major version bump
+
+---
+
+## Compatibility Matrix
+
+### Supported Versions
+
+| Component | Version Range | Status |
+|-----------|---------------|---------|
+| Python | 3.12+ | ✅ Supported |
+| Ansible Core | 2.16+ | ✅ Supported |
+| Globus SDK | 3.0+ | ✅ Supported |
+
+### Testing Matrix
+
+The collection is tested against:
+- Python: 3.12
+- Ansible: ansible-core 2.16+
+
+### Deprecation Policy
+
+- **Minor versions**: May deprecate features with 6-month notice
+- **Major versions**: May remove deprecated features
+- **Security**: Critical fixes may require immediate breaking changes
+
+---
+
+*This changelog helps track the evolution of the Ansible Globus Collection and ensures users can understand the impact of updates on their infrastructure.*
+"""
+# remove the leading and trailing whitespace from the templates
+trim = true
+
+[git]
+# parse the commits based on https://www.conventionalcommits.org
+conventional_commits = true
+# filter out the commits that are not conventional
+filter_unconventional = false
+# process each line of a commit as an individual commit
+split_commits = false
+# regex for preprocessing the commit messages
+commit_preprocessors = [
+  # Replace issue numbers with links
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/m1yag1/ansible-globus/issues/${2}))"},
+]
+# regex for parsing and grouping commits
+commit_parsers = [
+  { message = "^feat", group = "Added"},
+  { message = "^fix", group = "Fixed"},
+  { message = "^doc", group = "Documentation"},
+  { message = "^docs", group = "Documentation"},
+  { message = "^perf", group = "Performance"},
+  { message = "^refactor", group = "Changed"},
+  { message = "^style", group = "Styling"},
+  { message = "^test", group = "Testing"},
+  { message = "^chore\\(release\\): prepare for", skip = true},
+  { message = "^chore\\(deps.*\\)", skip = true},
+  { message = "^chore\\(pr\\)", skip = true},
+  { message = "^chore\\(pull\\)", skip = true},
+  { message = "^chore", group = "Miscellaneous Tasks"},
+  { body = ".*security", group = "Security"},
+  { message = "^revert", group = "Reverted"},
+]
+# protect breaking changes from being skipped due to matching a skipping commit_parser
+protect_breaking_commits = false
+# filter out the commits that are not matched by commit parsers
+filter_commits = false
+# regex for matching git tags
+tag_pattern = "v[0-9].*"
+# regex for skipping tags
+skip_tags = "v0.1.0-beta.1"
+# regex for ignoring tags
+ignore_tags = ""
+# sort the tags topologically
+topo_order = false
+# sort the commits inside sections by oldest/newest order
+sort_commits = "oldest"
+
+[remote.github]
+owner = "m1yag1"
+repo = "ansible-globus"

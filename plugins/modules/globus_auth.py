@@ -9,7 +9,7 @@ description:
     - Manage authentication policies for projects
     - Configure project membership and access controls
     - Requires manage_projects scope
-    - "NOTE: Deletion of projects and OAuth clients requires high-assurance authentication (MFA within 30 minutes) and must be done manually via https://app.globus.org/settings/developers"
+    - "NOTE: Deletion of projects and OAuth clients currently requires high-assurance authentication (MFA within 30 minutes) and must be done manually via https://app.globus.org/settings/developers. This is a known issue in Globus Auth that may be resolved in the future."
 version_added: "1.0.0"
 author:
     - Ansible Globus Module Contributors
@@ -143,9 +143,10 @@ EXAMPLES = r"""
       - "c7890abc-d274-11e5-b888-dbae3a8ba545"
     state: present
 
-# NOTE: Project deletion requires high-assurance authentication (MFA within 30 min)
-# and must be done manually at https://app.globus.org/settings/developers
-# state: absent is not supported for projects
+# NOTE: Project deletion currently requires high-assurance authentication (MFA within 30 min)
+# due to a known bug in Globus Auth. This may be resolved in a future release.
+# For now, projects must be deleted manually at https://app.globus.org/settings/developers
+# state: absent is temporarily not supported for projects
 
 # Policy Management
 - name: Create high assurance policy for project
@@ -230,9 +231,10 @@ EXAMPLES = r"""
     client_type: "client_identity"
     state: present
 
-# NOTE: Client deletion requires high-assurance authentication (MFA within 30 min)
-# and must be done manually at https://app.globus.org/settings/developers
-# state: absent is not supported for OAuth clients
+# NOTE: Client deletion currently requires high-assurance authentication (MFA within 30 min)
+# due to a known bug in Globus Auth. This may be resolved in a future release.
+# For now, OAuth clients must be deleted manually at https://app.globus.org/settings/developers
+# state: absent is temporarily not supported for OAuth clients
 
 # Combined workflow
 - name: Create project with policy
@@ -461,7 +463,10 @@ def update_project(api, project_id, params):
         api.handle_api_error(e, f"updating project {project_id}")
 
 
-# Project deletion function removed - requires high-assurance auth
+# Project deletion function removed - temporarily disabled due to Globus Auth bug
+# BUG: Service clients cannot delete projects due to high-assurance auth requirement
+# This is a known issue in Globus Auth that may be resolved in the future
+# TODO: Re-enable deletion when auth service is fixed
 # Users must delete projects manually at https://app.globus.org/settings/developers
 
 
@@ -755,7 +760,10 @@ def update_client(api, client_id, params):
         api.handle_api_error(e, f"updating client {client_id}")
 
 
-# Client deletion function removed - requires high-assurance auth
+# Client deletion function removed - temporarily disabled due to Globus Auth bug
+# BUG: Service clients cannot delete OAuth clients due to high-assurance auth requirement
+# This is a known issue in Globus Auth that may be resolved in the future
+# TODO: Re-enable deletion when auth service is fixed
 # Users must delete OAuth clients manually at https://app.globus.org/settings/developers
 
 
@@ -862,8 +870,9 @@ def main():
         elif state == "absent":
             module.fail_json(
                 msg=(
-                    "Deleting projects requires high-assurance authentication (MFA within 30 minutes) "
-                    "and is not supported via Ansible. Please delete this project manually:\n"
+                    "Deleting projects via service clients currently requires high-assurance authentication "
+                    "(MFA within 30 minutes) due to a known bug in Globus Auth. This limitation may be "
+                    "resolved in a future release. For now, please delete this project manually:\n\n"
                     "1. Go to https://app.globus.org/settings/developers\n"
                     "2. Select your project\n"
                     "3. Use the 'Delete Project' option\n\n"
@@ -1037,8 +1046,9 @@ def main():
         elif state == "absent":
             module.fail_json(
                 msg=(
-                    "Deleting OAuth clients requires high-assurance authentication (MFA within 30 minutes) "
-                    "and is not supported via Ansible. Please delete this client manually:\n"
+                    "Deleting OAuth clients via service clients currently requires high-assurance authentication "
+                    "(MFA within 30 minutes) due to a known bug in Globus Auth. This limitation may be "
+                    "resolved in a future release. For now, please delete this client manually:\n\n"
                     "1. Go to https://app.globus.org/settings/developers\n"
                     "2. Select your project\n"
                     "3. Navigate to the 'Apps' tab\n"

@@ -772,9 +772,10 @@ def test_auth_client_with_file_output(
 
 
 # NOTE: Project and OAuth client deletion tests have been removed
-# Deletion requires high-assurance authentication (MFA within 30 minutes)
-# and is not supported via Ansible. Users must delete these resources
-# manually at https://app.globus.org/settings/developers
+# BUG: Service clients cannot delete projects/clients due to high-assurance auth requirement
+# This is a known issue in Globus Auth that may be resolved in the future
+# TODO: Re-enable deletion tests when auth service is fixed
+# For now, users must delete these resources manually at https://app.globus.org/settings/developers
 
 
 if __name__ == "__main__":

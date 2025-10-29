@@ -40,7 +40,7 @@ An Ansible collection for managing Globus infrastructure - endpoints, collection
 
 ```bash
 # Clone the repository
-git clone https://github.com/blackbird/ansible-globus.git
+git clone https://github.com/m1yag1/ansible-globus.git
 cd ansible-globus
 
 # Install with uv (recommended)
@@ -232,7 +232,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 Quick contributor setup:
 
 ```bash
-git clone https://github.com/blackbird/ansible-globus.git
+git clone https://github.com/m1yag1/ansible-globus.git
 cd ansible-globus
 uv sync
 uv run pre-commit install
@@ -289,7 +289,7 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 - [Globus Documentation](https://docs.globus.org)
 - [Ansible Documentation](https://docs.ansible.com)
-- [Issue Tracker](https://github.com/blackbird/ansible-globus/issues)
+- [Issue Tracker](https://github.com/m1yag1/ansible-globus/issues)
 
 ---
 

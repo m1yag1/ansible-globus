@@ -26,10 +26,10 @@ tags:
 
 dependencies: {}
 
-repository: https://github.com/your-org/ansible-globus
-documentation: https://github.com/your-org/ansible-globus/blob/main/README.md
-homepage: https://github.com/your-org/ansible-globus
-issues: https://github.com/your-org/ansible-globus/issues
+repository: https://github.com/m1yag1/ansible-globus
+documentation: https://github.com/m1yag1/ansible-globus/blob/main/README.md
+homepage: https://github.com/m1yag1/ansible-globus
+issues: https://github.com/m1yag1/ansible-globus/issues
 
 # Build ignore patterns
 build_ignore:

@@ -239,6 +239,41 @@ uv run pre-commit install
 uv run tox
 ```
 
+## Publishing to Ansible Galaxy
+
+This collection can be published to [Ansible Galaxy](https://galaxy.ansible.com) for distribution.
+
+### Test Build Locally
+
+```bash
+# Test that the collection builds and installs correctly
+tox -e galaxy-test
+```
+
+### Build Only
+
+```bash
+# Build the collection tarball (creates community-globus-X.Y.Z.tar.gz)
+tox -e galaxy-build
+```
+
+### Publish to Galaxy
+
+```bash
+# Set your Galaxy API token (get from https://galaxy.ansible.com/me/preferences)
+export ANSIBLE_GALAXY_TOKEN="your-token-here"
+
+# Build and publish
+tox -e galaxy-publish
+```
+
+**Before publishing:**
+1. Update version in `galaxy.yml`
+2. Update `CHANGELOG.md` with release notes
+3. Run full test suite: `tox`
+4. Test build: `tox -e galaxy-test`
+5. Commit and tag: `git tag vX.Y.Z && git push --tags`
+
 ## Requirements
 
 - **Python**: 3.12+

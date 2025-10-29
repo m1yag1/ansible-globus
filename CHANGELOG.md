@@ -8,17 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Nothing yet
+
+### Changed
+- Nothing yet
+
+### Fixed
+- Nothing yet
+
+## [0.1.0] - TBD
+
+### Added
 - Initial Ansible collection for Globus infrastructure management
 - Core modules for managing Globus resources:
+  - `globus_auth` - Manage Globus Auth projects and OAuth clients
   - `globus_endpoint` - Manage Globus Transfer endpoints
   - `globus_collection` - Manage data collections on endpoints
   - `globus_group` - Manage user groups and access control
   - `globus_compute` - Manage compute endpoints for function execution
   - `globus_flow` - Manage automation workflows
-- Authentication support for CLI and client credentials methods
+- Authentication support for CLI, client credentials, and access token methods
 - Comprehensive test suite with unit, integration, and e2e tests
 - Modern development workflow using uv and tox
+- Ansible Galaxy publishing support via tox environments
 - Documentation including README, developer guide, and contributing guidelines
+
+### Known Limitations
+- Project and OAuth client deletion temporarily disabled due to Globus Auth high-assurance requirement
+  - Users must delete these resources manually at https://app.globus.org/settings/developers
+  - This limitation may be resolved in a future Globus Auth release
 
 ### Technical Details
 - Built with Globus SDK 3.0+ for optimal performance and reliability

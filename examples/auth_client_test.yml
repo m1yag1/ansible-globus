@@ -138,27 +138,22 @@
       debug:
         msg: "{{ cred_file_content.stdout }}"
 
-    # Cleanup
-    - name: Cleanup - Delete all test clients
-      community.globus.globus_auth:
-        resource_type: client
-        name: "{{ item.name }}"
-        project_id: "{{ project.resource_id }}"
-        auth_method: "{{ auth_method }}"
-        state: absent
-      loop:
-        - "{{ service_account }}"
-        - "{{ desktop_app }}"
-        - "{{ ci_cd_client }}"
-        - "{{ file_output_client }}"
-
-    - name: Cleanup - Delete test project
-      community.globus.globus_auth:
-        resource_type: project
-        name: "{{ project.name }}"
-        auth_method: "{{ auth_method }}"
-        state: absent
-
-    - name: Success message
+    # Cleanup Note
+    - name: Cleanup instructions
       debug:
-        msg: "✅ All OAuth client tests completed successfully!"
+        msg:
+          - "✅ All OAuth client tests completed successfully!"
+          - ""
+          - "⚠️  CLEANUP REQUIRED: Manual deletion needed"
+          - "Deleting projects and OAuth clients requires high-assurance authentication"
+          - "(MFA within 30 minutes) and cannot be done via Ansible."
+          - ""
+          - "To clean up these test resources:"
+          - "1. Go to https://app.globus.org/settings/developers"
+          - "2. Select project: {{ project.name }} ({{ project.resource_id }})"
+          - "3. Delete the following clients from the 'Apps' tab:"
+          - "   - {{ service_account.name }} ({{ service_account.client_id }})"
+          - "   - {{ desktop_app.name }} ({{ desktop_app.client_id }})"
+          - "   - {{ ci_cd_client.name }} ({{ ci_cd_client.client_id }})"
+          - "   - {{ file_output_client.name }} ({{ file_output_client.client_id }})"
+          - "4. Delete the project using 'Delete Project' option"

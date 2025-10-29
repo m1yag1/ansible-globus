@@ -3,12 +3,13 @@
 DOCUMENTATION = r"""
 ---
 module: globus_auth
-short_description: Manage Globus Auth resources (projects and policies)
+short_description: Manage Globus Auth resources (projects, clients, and policies)
 description:
-    - Create, update, or delete Globus Auth projects
+    - Create and update Globus Auth projects and OAuth clients
     - Manage authentication policies for projects
     - Configure project membership and access controls
     - Requires manage_projects scope
+    - "NOTE: Deletion of projects and OAuth clients requires high-assurance authentication (MFA within 30 minutes) and must be done manually via https://app.globus.org/settings/developers"
 version_added: "1.0.0"
 author:
     - Ansible Globus Module Contributors
@@ -142,11 +143,9 @@ EXAMPLES = r"""
       - "c7890abc-d274-11e5-b888-dbae3a8ba545"
     state: present
 
-- name: Delete a project
-  globus_auth:
-    resource_type: project
-    name: "Old Research Project"
-    state: absent
+# NOTE: Project deletion requires high-assurance authentication (MFA within 30 min)
+# and must be done manually at https://app.globus.org/settings/developers
+# state: absent is not supported for projects
 
 # Policy Management
 - name: Create high assurance policy for project
@@ -231,12 +230,9 @@ EXAMPLES = r"""
     client_type: "client_identity"
     state: present
 
-- name: Delete a client
-  globus_auth:
-    resource_type: client
-    name: "Old Client"
-    project_id: "abc123-def456-ghi789"
-    state: absent
+# NOTE: Client deletion requires high-assurance authentication (MFA within 30 min)
+# and must be done manually at https://app.globus.org/settings/developers
+# state: absent is not supported for OAuth clients
 
 # Combined workflow
 - name: Create project with policy
@@ -465,13 +461,8 @@ def update_project(api, project_id, params):
         api.handle_api_error(e, f"updating project {project_id}")
 
 
-def delete_project(api, project_id):
-    """Delete a project using SDK."""
-    try:
-        api.auth_client.delete_project(project_id)
-        return True
-    except Exception as e:
-        api.handle_api_error(e, f"deleting project {project_id}")
+# Project deletion function removed - requires high-assurance auth
+# Users must delete projects manually at https://app.globus.org/settings/developers
 
 
 # Policy functions
@@ -764,13 +755,8 @@ def update_client(api, client_id, params):
         api.handle_api_error(e, f"updating client {client_id}")
 
 
-def delete_client(api, client_id):
-    """Delete an OAuth client using SDK."""
-    try:
-        api.auth_client.delete_client(client_id)
-        return True
-    except Exception as e:
-        api.handle_api_error(e, f"deleting client {client_id}")
+# Client deletion function removed - requires high-assurance auth
+# Users must delete OAuth clients manually at https://app.globus.org/settings/developers
 
 
 def main():
@@ -874,14 +860,17 @@ def main():
                 )
 
         elif state == "absent":
-            if existing:
-                if module.check_mode:
-                    module.exit_json(changed=True, resource_type="project", name=name)
-
-                delete_project(api, existing["id"])
-                module.exit_json(changed=True, resource_type="project", name=name)
-            else:
-                module.exit_json(changed=False, resource_type="project", name=name)
+            module.fail_json(
+                msg=(
+                    "Deleting projects requires high-assurance authentication (MFA within 30 minutes) "
+                    "and is not supported via Ansible. Please delete this project manually:\n"
+                    "1. Go to https://app.globus.org/settings/developers\n"
+                    "2. Select your project\n"
+                    "3. Use the 'Delete Project' option\n\n"
+                    f"Project name: {name}\n"
+                    f"Project ID: {existing['id'] if existing else 'not found'}"
+                )
+            )
 
     # Handle policies
     elif resource_type == "policy":
@@ -1046,29 +1035,19 @@ def main():
                 module.exit_json(**response)
 
         elif state == "absent":
-            if existing:
-                if module.check_mode:
-                    module.exit_json(
-                        changed=True,
-                        resource_type="client",
-                        name=name,
-                        project_id=project_id,
-                    )
-
-                delete_client(api, existing["id"])
-                module.exit_json(
-                    changed=True,
-                    resource_type="client",
-                    name=name,
-                    project_id=project_id,
+            module.fail_json(
+                msg=(
+                    "Deleting OAuth clients requires high-assurance authentication (MFA within 30 minutes) "
+                    "and is not supported via Ansible. Please delete this client manually:\n"
+                    "1. Go to https://app.globus.org/settings/developers\n"
+                    "2. Select your project\n"
+                    "3. Navigate to the 'Apps' tab\n"
+                    "4. Select your client and choose 'Delete'\n\n"
+                    f"Client name: {name}\n"
+                    f"Client ID: {existing['id'] if existing else 'not found'}\n"
+                    f"Project ID: {project_id}"
                 )
-            else:
-                module.exit_json(
-                    changed=False,
-                    resource_type="client",
-                    name=name,
-                    project_id=project_id,
-                )
+            )
 
 
 if __name__ == "__main__":

@@ -26,17 +26,6 @@ repos:
       - id: yamllint
         args: [-c=.yamllint.yml]
 
-  # ansible-lint disabled in pre-commit due to dependency issues
-  # It runs in CI via: tox -e lint
-  # - repo: https://github.com/ansible/ansible-lint
-  #   rev: v6.17.2
-  #   hooks:
-  #     - id: ansible-lint
-  #       files: \.(yaml|yml)$
-  #       args: [--exclude=.github/]
-  #       additional_dependencies:
-  #         - ansible-core>=2.16.0
-
   - repo: https://github.com/pycqa/bandit
     rev: 1.7.5
     hooks:
@@ -52,6 +41,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: ansible-lint
+        name: ansible-lint (via tox)
+        entry: tox -e ansible-lint --
+        language: system
+        files: ^docs/examples/.*\.(yaml|yml)$
+        pass_filenames: false
+        stages: [commit]
       - id: pytest-check
         name: pytest-check
         entry: pytest

@@ -243,76 +243,74 @@ uv run tox
 
 This collection can be published to [Ansible Galaxy](https://galaxy.ansible.com) for distribution.
 
-### Prepare Release
+### Prerequisites
 
-This project uses [conventional commits](https://www.conventionalcommits.org/) and automated changelog generation via [git-cliff](https://git-cliff.org/).
-
+Install git-cliff (one time):
 ```bash
-# 1. Install git-cliff (one time)
 # macOS:
 brew install git-cliff
-# or download from: https://github.com/orhun/git-cliff/releases
 
-# 2. Preview changelog for next version
-tox -e changelog-generate -- 0.2.0
-
-# 3. Update CHANGELOG.md
-tox -e changelog-update -- 0.2.0
-
-# 4. Update version in galaxy.yml
-# Edit galaxy.yml: version: 0.2.0
-
-# 5. Commit release preparation
-git add CHANGELOG.md galaxy.yml
-git commit -m "chore(release): prepare for 0.2.0"
+# Linux/Other:
+# See: https://github.com/orhun/git-cliff/releases
 ```
 
-### Test Build Locally
+### Release Process
+
+This project uses [conventional commits](https://www.conventionalcommits.org/) for automated version bumping and changelog generation.
+
+**Step 1: Prepare Release**
 
 ```bash
-# Test that the collection builds and installs correctly
+# Auto-detect version from commits (feat → minor, fix → patch)
+tox -e prepare-release
+
+# Or manually specify version
+tox -e prepare-release -- 0.2.0
+tox -e prepare-release -- --minor
+tox -e prepare-release -- --patch
+```
+
+This will:
+- Analyze conventional commits since last tag
+- Suggest version bump (or use your override)
+- Generate CHANGELOG.md with git-cliff
+- Update galaxy.yml version
+- Stage files for review
+
+**Step 2: Review & Edit (Optional)**
+
+Review the generated changes and edit if needed:
+```bash
+# Edit CHANGELOG.md to add context, reword entries, etc.
+vim CHANGELOG.md
+
+# Verify version is correct
+grep "^version:" galaxy.yml
+```
+
+**Step 3: Complete Release**
+
+```bash
+tox -e release
+```
+
+This will:
+- Validate changes are ready
+- Run `tox -e galaxy-test` to verify build
+- Commit changes
+- Create git tag
+- Push to GitHub (triggers automated Galaxy publish)
+
+**GitHub Actions will automatically publish to Ansible Galaxy when the tag is pushed.**
+
+### Manual Testing
+
+```bash
+# Test build locally
 tox -e galaxy-test
-```
 
-### Build Only
-
-```bash
-# Build the collection tarball (creates community-globus-X.Y.Z.tar.gz)
+# Build without installing
 tox -e galaxy-build
-```
-
-### Publish to Galaxy
-
-```bash
-# Set your Galaxy API token (get from https://galaxy.ansible.com/me/preferences)
-export ANSIBLE_GALAXY_TOKEN="your-token-here"
-
-# Build and publish
-tox -e galaxy-publish
-```
-
-### Complete Release Workflow
-
-```bash
-# 1. Generate changelog
-tox -e changelog-update -- 0.2.0
-
-# 2. Update galaxy.yml version
-# (edit manually)
-
-# 3. Run tests
-tox
-
-# 4. Test build
-tox -e galaxy-test
-
-# 5. Commit and tag
-git add CHANGELOG.md galaxy.yml
-git commit -m "chore(release): prepare for 0.2.0"
-git tag v0.2.0
-git push && git push --tags
-
-# GitHub Actions will automatically publish to Galaxy
 ```
 
 ## Requirements

@@ -32,6 +32,7 @@ repos:
       - id: bandit
         args: [--recursive, --skip, "B101,B601"]
         exclude: ^tests/
+        additional_dependencies: ['pbr']
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.4.0

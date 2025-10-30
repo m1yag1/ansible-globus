@@ -11,106 +11,99 @@ This guide covers how to release a new version of the Ansible Globus Collection 
 
 ## Release Steps
 
-### 1. Determine Version Number
+### Automated Two-Step Process
 
-Follow [Semantic Versioning](https://semver.org/):
+This project uses automated release tooling that leverages [conventional commits](https://www.conventionalcommits.org/) for version detection.
 
-- **0.x.y** - Pre-1.0 development releases
-  - **Minor (0.X.0)**: New features, may include breaking changes
-  - **Patch (0.1.X)**: Bug fixes only
-- **1.x.y** - Stable releases
-  - **Major (X.0.0)**: Breaking changes
-  - **Minor (1.X.0)**: New features, backward compatible
-  - **Patch (1.0.X)**: Bug fixes only
+**Step 1: Prepare Release**
+
+```bash
+# Auto-detect version from commits
+tox -e prepare-release
+
+# Or manually specify
+tox -e prepare-release -- 0.2.0      # Explicit version
+tox -e prepare-release -- --minor    # Force minor bump
+tox -e prepare-release -- --patch    # Force patch bump
+```
+
+This command will:
+1. Analyze conventional commits since last tag
+2. Suggest version bump based on commit types:
+   - `feat:` commits → **minor** bump (0.1.0 → 0.2.0)
+   - `fix:` commits → **patch** bump (0.1.0 → 0.1.1)
+   - `BREAKING CHANGE:` → **minor** bump in 0.x (pre-1.0)
+3. Generate CHANGELOG.md using git-cliff
+4. Update galaxy.yml version
+5. Leave files unstaged for review
+
+**Step 2: Review Changes (Optional)**
+
+Review and edit the generated files if needed:
+
+```bash
+# Review the changelog
+cat CHANGELOG.md
+
+# Edit if needed (add context, reword entries, etc.)
+vim CHANGELOG.md
+
+# Verify version
+grep "^version:" galaxy.yml
+```
+
+**Step 3: Complete Release**
+
+```bash
+tox -e release
+```
+
+This command will:
+1. Validate that CHANGELOG.md and galaxy.yml were updated
+2. Verify you're on main branch (warns if not)
+3. Run `tox -e galaxy-test` to verify build works
+4. Ask for confirmation
+5. Commit changes with: `chore(release): prepare for X.Y.Z`
+6. Create git tag: `vX.Y.Z`
+7. Push to GitHub with tags
+
+**Important:** The tag push triggers GitHub Actions to automatically publish to Ansible Galaxy.
+
+### Version Numbering (Pre-1.0)
+
+This project follows [Semantic Versioning](https://semver.org/) with pre-1.0 semantics:
+
+- **Minor (0.X.0)**: New features, breaking changes OK
+- **Patch (0.X.Y)**: Bug fixes only
 
 Examples:
-- Bug fix: `0.1.0` → `0.1.1`
 - New feature: `0.1.0` → `0.2.0`
-- First stable: `0.9.0` → `1.0.0`
-- Breaking change after 1.0: `1.2.3` → `2.0.0`
+- Bug fix: `0.1.0` → `0.1.1`
+- Multiple features: `0.15.3` → `0.16.0`
+- Expected trajectory: `0.1.0` → ... → `0.100.2` → ... → `1.0.0`
 
-### 2. Generate Changelog
+### Manual Release (if needed)
 
-The project uses [git-cliff](https://git-cliff.org/) to automatically generate changelogs from [conventional commits](https://www.conventionalcommits.org/).
-
-```bash
-# Preview changelog for new version (doesn't write anything)
-tox -e changelog-generate -- 0.2.0
-
-# Review the output to ensure it looks correct
-```
-
-If the output looks good:
+If you need to release manually without the automation:
 
 ```bash
-# Update CHANGELOG.md with new version
-tox -e changelog-update -- 0.2.0
-```
+# 1. Update CHANGELOG.md manually
+vim CHANGELOG.md
 
-**Manual review:**
-- Open `CHANGELOG.md` and review the generated entries
-- Edit if needed (add context, reword, remove noise)
-- Ensure the date is correct
-- Check that breaking changes are clearly marked
-
-### 3. Update Version in galaxy.yml
-
-```bash
-# Edit galaxy.yml
-vim galaxy.yml
-
-# Update the version line:
-version: 0.2.0
-```
-
-Or use sed:
-```bash
+# 2. Update galaxy.yml version
 sed -i '' 's/^version: .*/version: 0.2.0/' galaxy.yml
-```
 
-### 4. Run Full Test Suite
-
-```bash
-# Run all tests
-tox
-
-# Run linting
-tox -e lint
-
-# Test the Galaxy build
+# 3. Test build
 tox -e galaxy-test
-```
 
-Ensure all tests pass before proceeding.
-
-### 5. Commit Release Preparation
-
-```bash
-# Stage changes
+# 4. Commit and tag
 git add CHANGELOG.md galaxy.yml
-
-# Commit with conventional commit format
 git commit -m "chore(release): prepare for 0.2.0"
-
-# Push to GitHub
-git push origin main
-```
-
-Wait for CI to pass on this commit.
-
-### 6. Create and Push Git Tag
-
-```bash
-# Create annotated tag
 git tag -a v0.2.0 -m "Release v0.2.0"
-
-# Push tag to GitHub
-git push origin v0.2.0
+git push origin main v0.2.0
 ```
 
-**Important:** The tag must match the format `v*` (e.g., `v0.2.0`) to trigger the release workflow.
-
-### 7. Monitor GitHub Actions
+### Monitor GitHub Actions
 
 Once you push the tag, GitHub Actions will automatically:
 
@@ -254,20 +247,16 @@ git push origin main v0.2.1
 
 Use this checklist for each release:
 
-- [ ] Determine version number (semver)
-- [ ] Generate changelog: `tox -e changelog-update -- X.Y.Z`
-- [ ] Review and edit `CHANGELOG.md`
-- [ ] Update `galaxy.yml` version
-- [ ] Run full test suite: `tox`
-- [ ] Test Galaxy build: `tox -e galaxy-test`
-- [ ] Commit: `git commit -m "chore(release): prepare for X.Y.Z"`
-- [ ] Push to main: `git push origin main`
-- [ ] Wait for CI to pass
-- [ ] Create tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
-- [ ] Push tag: `git push origin vX.Y.Z`
-- [ ] Monitor GitHub Actions
-- [ ] Verify on Ansible Galaxy
-- [ ] Verify on GitHub Releases
+- [ ] All changes merged to main
+- [ ] All CI tests passing
+- [ ] Run: `tox -e prepare-release` (or with version override)
+- [ ] Review generated `CHANGELOG.md` (edit if needed)
+- [ ] Verify `galaxy.yml` version is correct
+- [ ] Run: `tox -e release`
+- [ ] Confirm when prompted (validates, tests, commits, tags, pushes)
+- [ ] Monitor GitHub Actions: https://github.com/m1yag1/ansible-globus/actions
+- [ ] Verify on Ansible Galaxy: https://galaxy.ansible.com/ui/repo/published/community/globus/
+- [ ] Verify GitHub Release: https://github.com/m1yag1/ansible-globus/releases
 - [ ] Test installation: `ansible-galaxy collection install community.globus:X.Y.Z`
 - [ ] Announce release (if applicable)
 

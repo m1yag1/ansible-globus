@@ -16,7 +16,7 @@
   become: false
   gather_facts: false
   collections:
-    - community.globus
+    - m1yag1.globus
 
   vars:
     # These should match your existing group_vars/all.yml structure
@@ -36,7 +36,7 @@
 
     # Create/update endpoint with your existing variables
     - name: Manage GCS Endpoint
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         auth: "{{ globus_auth }}"
         display_name: "{{ gcs_endpoint_name }}"
         description: "{{ gcs_endpoint_description | default('') }}"
@@ -52,7 +52,7 @@
 
     # Create collections using your existing gcs_collections variable
     - name: Manage GCS Collections
-      community.globus.globus_collection:
+      m1yag1.globus.globus_collection:
         auth: "{{ globus_auth }}"
         endpoint_id: "{{ endpoint_result.endpoint.id }}"
         display_name: "{{ item.display_name }}"
@@ -72,7 +72,7 @@
 
     # Create test users as Globus identities (if needed for testing)
     - name: Create test groups for user management
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         auth: "{{ globus_auth }}"
         name: "{{ gcs_endpoint_name | regex_replace('[^a-zA-Z0-9]', '-') }}-test-users"
         description: "Test users for {{ gcs_endpoint_name }}"

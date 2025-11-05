@@ -132,7 +132,7 @@ Create `test_globus.yml`:
 
   tasks:
     - name: Test endpoint management (list only - safe)
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "test-endpoint-{{ ansible_date_time.epoch }}"
         state: present
         auth_method: client_credentials
@@ -169,7 +169,7 @@ ansible-playbook test_globus.yml
   tasks:
     # Test 1: Client Credentials Auth
     - name: Test client credentials authentication
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "auth-test-{{ ansible_date_time.epoch }}"
         state: present
         auth_method: client_credentials
@@ -186,7 +186,7 @@ ansible-playbook test_globus.yml
 
     # Test 2: CLI Auth (if you have globus CLI installed)
     - name: Test CLI authentication
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "cli-auth-test-{{ ansible_date_time.epoch }}"
         state: present
         auth_method: cli
@@ -215,7 +215,7 @@ ansible-playbook test_globus.yml
 
   tasks:
     - name: Create test endpoint
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{ test_endpoint_name }}"
         description: "Ansible test endpoint - safe to delete"
         organization: "Test Organization"
@@ -231,7 +231,7 @@ ansible-playbook test_globus.yml
         var: create_result
 
     - name: Verify endpoint exists (idempotency test)
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{ test_endpoint_name }}"
         description: "Ansible test endpoint - safe to delete"
         organization: "Test Organization"
@@ -249,7 +249,7 @@ ansible-playbook test_globus.yml
         fail_msg: "Module is not idempotent"
 
     - name: Clean up - delete test endpoint
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{ test_endpoint_name }}"
         state: absent
         auth_method: client_credentials
@@ -280,7 +280,7 @@ ansible-playbook test_globus.yml
 
   tasks:
     - name: Create test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "{{ test_group_name }}"
         description: "Ansible test group - safe to delete"
         state: present
@@ -294,7 +294,7 @@ ansible-playbook test_globus.yml
         var: group_result
 
     - name: Clean up - delete test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "{{ test_group_name }}"
         state: absent
         auth_method: client_credentials
@@ -315,7 +315,7 @@ ansible-playbook test_globus.yml
   tasks:
     # Test invalid credentials
     - name: Test invalid credentials
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "error-test"
         state: present
         auth_method: client_credentials
@@ -332,7 +332,7 @@ ansible-playbook test_globus.yml
 
     # Test missing required parameters
     - name: Test missing parameters
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         state: present
         auth_method: client_credentials
         client_id: "test"
@@ -389,7 +389,7 @@ ansible-playbook test_globus.yml -vvv
 
 ```yaml
 - name: Enable debug logging
-  community.globus.globus_endpoint:
+  m1yag1.globus.globus_endpoint:
     name: "debug-test"
     state: present
     auth_method: client_credentials
@@ -416,7 +416,7 @@ ansible-playbook test_globus.yml -vvv
 
   tasks:
     - name: Create multiple endpoints (performance test)
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "perf-test-{{ item }}-{{ ansible_date_time.epoch }}"
         state: present
         auth_method: client_credentials
@@ -430,7 +430,7 @@ ansible-playbook test_globus.yml -vvv
         msg: "Created {{ perf_results.results | length }} endpoints"
 
     - name: Clean up performance test endpoints
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "perf-test-{{ item }}-{{ ansible_date_time.epoch }}"
         state: absent
         auth_method: client_credentials
@@ -490,7 +490,7 @@ This shows the proper multi-host approach:
   tasks:
     # Create endpoint pointing to each EC2 server
     - name: Create Globus endpoint for each server
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{ hostvars[item]['ansible_hostname'] }}-gcs"
         description: "GCS endpoint for {{ hostvars[item]['ansible_hostname'] }}"
         organization: "Development Testing"
@@ -513,7 +513,7 @@ This shows the proper multi-host approach:
 
     # Step 2: Create collections (from local machine)
     - name: Create test data collection
-      community.globus.globus_collection:
+      m1yag1.globus.globus_collection:
         name: "Test Data"
         endpoint_id: "{{ gcs_endpoint.endpoint_id }}"
         path: "/home/ec2-user/test-data"

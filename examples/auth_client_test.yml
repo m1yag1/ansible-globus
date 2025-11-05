@@ -31,7 +31,7 @@
 
   tasks:
     - name: Create test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-demo-project-{{ ansible_date_time.epoch }}"
         contact_email: "admin@example.com"
@@ -46,7 +46,7 @@
 
     # Test 1: Confidential Client (Service Account)
     - name: Create confidential client (service account)
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "demo-service-account-{{ ansible_date_time.epoch }}"
         project_id: "{{ project.resource_id }}"
@@ -77,7 +77,7 @@
 
     # Test 2: Public Installed Client (Thick Client / Desktop App)
     - name: Create public installed client (thick client)
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "demo-desktop-app-{{ ansible_date_time.epoch }}"
         project_id: "{{ project.resource_id }}"
@@ -97,7 +97,7 @@
 
     # Test 3: Client Identity (for CI/CD automation)
     - name: Create client identity
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "demo-ci-cd-{{ ansible_date_time.epoch }}"
         project_id: "{{ project.resource_id }}"
@@ -114,7 +114,7 @@
 
     # Test 4: Client with file output
     - name: Create client with credential file output
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "demo-file-output-{{ ansible_date_time.epoch }}"
         project_id: "{{ project.resource_id }}"

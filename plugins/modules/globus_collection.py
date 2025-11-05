@@ -209,10 +209,10 @@ changed:
 
 from ansible.module_utils.basic import AnsibleModule
 
-from ansible_collections.community.globus.plugins.module_utils.globus_api import (
+from ansible_collections.m1yag1.globus.plugins.module_utils.globus_api import (
     GlobusAPI,
 )
-from ansible_collections.community.globus.plugins.module_utils.globus_common import (
+from ansible_collections.m1yag1.globus.plugins.module_utils.globus_common import (
     globus_argument_spec,
 )
 

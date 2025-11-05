@@ -6,7 +6,7 @@ This guide shows how to test the new Ansible Globus Collection with your existin
 
 Your hybrid approach:
 1. **Traditional Role**: `globus-connect-server` role installs and configures GCS software on EC2
-2. **New Collection**: `community.globus` manages Globus resources via API from your Mac
+2. **New Collection**: `m1yag1.globus` manages Globus resources via API from your Mac
 
 ## Prerequisites
 
@@ -95,14 +95,14 @@ Create a simple test playbook:
 ---
 - hosts: localhost
   collections:
-    - community.globus
+    - m1yag1.globus
   vars:
     globus_auth:
       client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
       client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
   tasks:
     - name: Test endpoint creation
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         auth: "{{ globus_auth }}"
         display_name: "Test API Endpoint"
         description: "Testing the new collection"
@@ -127,7 +127,7 @@ ansible-playbook test_endpoint.yml
 ---
 - hosts: localhost
   collections:
-    - community.globus
+    - m1yag1.globus
   vars:
     globus_auth:
       client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
@@ -136,7 +136,7 @@ ansible-playbook test_endpoint.yml
     test_endpoint_id: "abc123-def456-..."
   tasks:
     - name: Test collection creation
-      community.globus.globus_collection:
+      m1yag1.globus.globus_collection:
         auth: "{{ globus_auth }}"
         endpoint_id: "{{ test_endpoint_id }}"
         display_name: "Test API Collection"
@@ -219,7 +219,7 @@ Once basic integration works:
    ```yaml
    # requirements.yml
    collections:
-     - name: community.globus
+     - name: m1yag1.globus
        source: /path/to/built/collection
    ```
 

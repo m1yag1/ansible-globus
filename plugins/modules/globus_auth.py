@@ -320,10 +320,10 @@ changed:
 
 from ansible.module_utils.basic import AnsibleModule
 
-from ansible_collections.community.globus.plugins.module_utils.globus_common import (
+from ansible_collections.m1yag1.globus.plugins.module_utils.globus_common import (
     globus_argument_spec,
 )
-from ansible_collections.community.globus.plugins.module_utils.globus_sdk_client import (
+from ansible_collections.m1yag1.globus.plugins.module_utils.globus_sdk_client import (
     GlobusSDKClient,
 )
 
@@ -428,7 +428,7 @@ def update_project(api, project_id, params):
                 try:
                     api.auth_client.add_project_admin(project_id, admin_id)
                     changed = True
-                except Exception:
+                except Exception:  # nosec B110 - Admin may already exist
                     pass
 
         if params.get("admin_group_ids") is not None:
@@ -436,7 +436,7 @@ def update_project(api, project_id, params):
                 try:
                     api.auth_client.add_project_admin_group(project_id, group_id)
                     changed = True
-                except Exception:
+                except Exception:  # nosec B110 - Admin group may already exist
                     pass
 
         return changed

@@ -128,17 +128,17 @@ After GitHub Actions completes (usually 2-5 minutes):
 sleep 60
 
 # Install from Galaxy
-ansible-galaxy collection install community.globus:0.2.0
+ansible-galaxy collection install m1yag1.globus:0.2.0
 
 # Verify version
-ansible-galaxy collection list community.globus
+ansible-galaxy collection list m1yag1.globus
 ```
 
 Should show:
 ```
 Collection       Version
 ---------------- -------
-community.globus 0.2.0
+m1yag1.globus 0.2.0
 ```
 
 #### Verify on GitHub
@@ -193,7 +193,7 @@ Consider announcing the release:
 ### Version Already Exists on Galaxy
 
 ```
-Error: community.globus:0.2.0 already exists
+Error: m1yag1.globus:0.2.0 already exists
 ```
 
 **Fix:** You cannot overwrite published versions. Bump to the next version (e.g., 0.2.1) and try again.
@@ -257,7 +257,7 @@ Use this checklist for each release:
 - [ ] Monitor GitHub Actions: https://github.com/m1yag1/ansible-globus/actions
 - [ ] Verify on Ansible Galaxy: https://galaxy.ansible.com/ui/repo/published/community/globus/
 - [ ] Verify GitHub Release: https://github.com/m1yag1/ansible-globus/releases
-- [ ] Test installation: `ansible-galaxy collection install community.globus:X.Y.Z`
+- [ ] Test installation: `ansible-galaxy collection install m1yag1.globus:X.Y.Z`
 - [ ] Announce release (if applicable)
 
 ## Automation Summary

@@ -82,7 +82,7 @@ jobs:
       - name: Verify build
         run: |
           ls -lh _build/
-          if [ ! -f _build/community-globus-*.tar.gz ]; then
+          if [ ! -f _build/m1yag1-globus-*.tar.gz ]; then
             echo "❌ Build failed: tarball not found"
             exit 1
           fi
@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ansible-collection
-          path: _build/community-globus-*.tar.gz
+          path: _build/m1yag1-globus-*.tar.gz
           retention-days: 5
 
   publish-galaxy:
@@ -135,7 +135,7 @@ jobs:
           fi
 
           # Use bash to expand glob pattern
-          bash -c 'ansible-galaxy collection publish _build/community-globus-*.tar.gz --token $ANSIBLE_GALAXY_TOKEN'
+          bash -c 'ansible-galaxy collection publish _build/m1yag1-globus-*.tar.gz --token $ANSIBLE_GALAXY_TOKEN'
           echo "✅ Published to Ansible Galaxy"
 
   create-github-release:
@@ -175,7 +175,7 @@ jobs:
           ## Installation
 
           \`\`\`bash
-          ansible-galaxy collection install community.globus:${{ steps.get_version.outputs.version }}
+          ansible-galaxy collection install m1yag1.globus:${{ steps.get_version.outputs.version }}
           \`\`\`
 
           ## Documentation
@@ -190,7 +190,7 @@ jobs:
           ## Installation
 
           \`\`\`bash
-          ansible-galaxy collection install community.globus:${{ steps.get_version.outputs.version }}
+          ansible-galaxy collection install m1yag1.globus:${{ steps.get_version.outputs.version }}
           \`\`\`
 
           ## Documentation
@@ -206,7 +206,7 @@ jobs:
         with:
           name: Release v${{ steps.get_version.outputs.version }}
           body_path: release_notes.md
-          files: _build/community-globus-*.tar.gz
+          files: _build/m1yag1-globus-*.tar.gz
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
           generate_release_notes: false
@@ -240,13 +240,13 @@ jobs:
 
       - name: Install collection from Galaxy
         run: |
-          ansible-galaxy collection install community.globus:${{ steps.get_version.outputs.version }}
+          ansible-galaxy collection install m1yag1.globus:${{ steps.get_version.outputs.version }}
           echo "✅ Collection installed successfully"
 
       - name: Verify installation
         run: |
-          ansible-galaxy collection list | grep community.globus
-          INSTALLED_VERSION=$(ansible-galaxy collection list | grep community.globus | awk '{print $2}')
+          ansible-galaxy collection list | grep m1yag1.globus
+          INSTALLED_VERSION=$(ansible-galaxy collection list | grep m1yag1.globus | awk '{print $2}')
           echo "Installed version: $INSTALLED_VERSION"
 
           if [ "$INSTALLED_VERSION" != "${{ steps.get_version.outputs.version }}" ]; then

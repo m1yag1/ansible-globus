@@ -118,7 +118,7 @@ Updated `scripts/setup_oauth_tokens.py` to include `AuthScopes.manage_projects` 
 ### Example 1: Create Service Account
 ```yaml
 - name: Create service account for automation
-  community.globus.globus_auth:
+  m1yag1.globus.globus_auth:
     resource_type: client
     name: "Automation Service Account"
     project_id: "{{ project_id }}"
@@ -140,7 +140,7 @@ Updated `scripts/setup_oauth_tokens.py` to include `AuthScopes.manage_projects` 
 ### Example 2: Create Desktop Application
 ```yaml
 - name: Create public desktop application client
-  community.globus.globus_auth:
+  m1yag1.globus.globus_auth:
     resource_type: client
     name: "My Desktop App"
     project_id: "{{ project_id }}"
@@ -155,7 +155,7 @@ Updated `scripts/setup_oauth_tokens.py` to include `AuthScopes.manage_projects` 
 ### Example 3: Create Client with File Output
 ```yaml
 - name: Create service account with credential file
-  community.globus.globus_auth:
+  m1yag1.globus.globus_auth:
     resource_type: client
     name: "CI/CD Pipeline"
     project_id: "{{ project_id }}"
@@ -231,7 +231,7 @@ This will:
 2. **Use `no_log: true`**
    ```yaml
    - name: Create service account
-     community.globus.globus_auth:
+     m1yag1.globus.globus_auth:
        # ...
      register: result
      no_log: true  # Prevents secrets from appearing in logs

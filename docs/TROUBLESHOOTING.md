@@ -36,7 +36,7 @@ echo $GLOBUS_CLIENT_SECRET
 ansible-galaxy collection list | grep globus
 
 # Reinstall if needed
-ansible-galaxy collection install community.globus --force
+ansible-galaxy collection install m1yag1.globus --force
 
 # Check PYTHONPATH
 export PYTHONPATH=$PWD/plugins:$PYTHONPATH

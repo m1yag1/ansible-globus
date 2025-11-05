@@ -138,7 +138,7 @@ jobs:
 
       - name: Install Ansible collection
         run: |
-          ansible-galaxy collection install community-globus-*.tar.gz --force
+          ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
       - name: Run integration tests with tox
         env:

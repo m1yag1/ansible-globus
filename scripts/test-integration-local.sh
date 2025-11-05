@@ -19,7 +19,7 @@ echo "This ensures Ansible uses your current source code, not a cached version."
 
 # Build and install the collection to ensure tests use current source
 ansible-galaxy collection build --force --output-path /tmp/
-COLLECTION_FILE=$(ls -t /tmp/community-globus-*.tar.gz | head -1)
+COLLECTION_FILE=$(ls -t /tmp/m1yag1-globus-*.tar.gz | head -1)
 echo -e "${GREEN}Built: $COLLECTION_FILE${NC}"
 
 ansible-galaxy collection install "$COLLECTION_FILE" --force

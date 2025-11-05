@@ -71,7 +71,7 @@ def test_group_management(ansible_playbook_auth_params, create_playbook, run_pla
   gather_facts: true
   tasks:
     - name: Create test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-test-group-{{{{ ansible_date_time.epoch }}}}"
         description: "Test group created by Ansible integration test"
         visibility: "private"
@@ -87,7 +87,7 @@ def test_group_management(ansible_playbook_auth_params, create_playbook, run_pla
           - group_result.name is defined
 
     - name: Delete test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "{{{{ group_result.name }}}}"
         {ansible_playbook_auth_params}
         state: absent
@@ -119,7 +119,7 @@ def test_endpoint_management(
   gather_facts: true
   tasks:
     - name: Create test endpoint
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "ansible-test-endpoint-{{{{ ansible_date_time.epoch }}}}"
         description: "Test endpoint created by Ansible integration test"
         organization: "Ansible Test Org"
@@ -137,7 +137,7 @@ def test_endpoint_management(
           - endpoint_result.name is defined
 
     - name: Update endpoint description
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{{{ endpoint_result.name }}}}"
         description: "Updated description"
         {ansible_playbook_auth_params_transfer}
@@ -150,7 +150,7 @@ def test_endpoint_management(
           - update_result.changed
 
     - name: Delete test endpoint
-      community.globus.globus_endpoint:
+      m1yag1.globus.globus_endpoint:
         name: "{{{{ endpoint_result.name }}}}"
         {ansible_playbook_auth_params_transfer}
         state: absent
@@ -201,7 +201,7 @@ def test_flow_management_with_file(
   gather_facts: true
   tasks:
     - name: Create test flow from file
-      community.globus.globus_flow:
+      m1yag1.globus.globus_flow:
         title: "ansible-test-flow-{{{{ ansible_date_time.epoch }}}}"
         subtitle: "Test flow from file"
         description: "Test flow created by Ansible integration test"
@@ -223,7 +223,7 @@ def test_flow_management_with_file(
           - flow_result.title is defined
 
     - name: Delete test flow
-      community.globus.globus_flow:
+      m1yag1.globus.globus_flow:
         title: "{{{{ flow_result.title }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent
@@ -252,7 +252,7 @@ def test_timer_management(
   gather_facts: true
   tasks:
     - name: Create recurring timer
-      community.globus.globus_timer:
+      m1yag1.globus.globus_timer:
         name: "ansible-test-timer-{{{{ ansible_date_time.epoch }}}}"
         schedule:
           type: recurring
@@ -274,7 +274,7 @@ def test_timer_management(
           - timer_result.status in ["active", "loaded"]
 
     - name: Delete timer
-      community.globus.globus_timer:
+      m1yag1.globus.globus_timer:
         name: "{{{{ timer_result.name }}}}"
         {ansible_playbook_auth_params_timers}
         state: absent
@@ -327,7 +327,7 @@ def test_flow_timer(
   gather_facts: true
   tasks:
     - name: Create test flow for timer
-      community.globus.globus_flow:
+      m1yag1.globus.globus_flow:
         title: "ansible-timer-flow-{{{{ ansible_date_time.epoch }}}}"
         subtitle: "Flow triggered by timer"
         description: "Test flow for timer integration"
@@ -349,7 +349,7 @@ def test_flow_timer(
           - flow_result.flow_scope is defined
 
     - name: Create timer to run the flow daily
-      community.globus.globus_timer:
+      m1yag1.globus.globus_timer:
         name: "ansible-flow-timer-{{{{ ansible_date_time.epoch }}}}"
         schedule:
           type: recurring
@@ -383,7 +383,7 @@ def test_flow_timer(
           - "Timer will run flow every 24 hours starting 2025-12-01"
 
     - name: Delete timer
-      community.globus.globus_timer:
+      m1yag1.globus.globus_timer:
         name: "{{{{ timer_result.name }}}}"
         {ansible_playbook_auth_params_timers}
         state: absent
@@ -395,7 +395,7 @@ def test_flow_timer(
           - timer_delete.changed
 
     - name: Delete flow
-      community.globus.globus_flow:
+      m1yag1.globus.globus_flow:
         title: "{{{{ flow_result.title }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent
@@ -422,7 +422,7 @@ def test_idempotency(ansible_playbook_auth_params, create_playbook, run_playbook
   gather_facts: true
   tasks:
     - name: Create test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-idempotency-test"
         description: "Test group for idempotency"
         visibility: "private"
@@ -431,7 +431,7 @@ def test_idempotency(ansible_playbook_auth_params, create_playbook, run_playbook
       register: first_run
 
     - name: Create same group again
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-idempotency-test"
         description: "Test group for idempotency"
         visibility: "private"
@@ -447,7 +447,7 @@ def test_idempotency(ansible_playbook_auth_params, create_playbook, run_playbook
           - first_run.group_id == second_run.group_id
 
     - name: Cleanup test group
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-idempotency-test"
         {ansible_playbook_auth_params}
         state: absent
@@ -468,7 +468,7 @@ def test_check_mode(ansible_playbook_auth_params, create_playbook, run_playbook)
   gather_facts: true
   tasks:
     - name: Create test group in check mode
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-check-mode-test"
         description: "This should not be created"
         {ansible_playbook_auth_params}
@@ -483,7 +483,7 @@ def test_check_mode(ansible_playbook_auth_params, create_playbook, run_playbook)
           - check_result.group_id is not defined
 
     - name: Verify group was not actually created
-      community.globus.globus_group:
+      m1yag1.globus.globus_group:
         name: "ansible-check-mode-test"
         {ansible_playbook_auth_params}
         state: absent
@@ -517,7 +517,7 @@ def test_auth_project_management(
   gather_facts: true
   tasks:
     - name: Create test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-test-project-{{{{ ansible_date_time.epoch }}}}"
         contact_email: "test@example.com"
@@ -558,7 +558,7 @@ def test_auth_client_confidential(
   gather_facts: true
   tasks:
     - name: Create or reuse test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-integration-test-project"
         contact_email: "test@example.com"
@@ -570,7 +570,7 @@ def test_auth_client_confidential(
       register: project_result
 
     - name: Create confidential client (service account)
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "test-service-account-{{{{ ansible_date_time.epoch }}}}"
         project_id: "{{{{ project_result.resource_id }}}}"
@@ -617,7 +617,7 @@ def test_auth_client_public_installed(
   gather_facts: true
   tasks:
     - name: Create or reuse test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-integration-test-project"
         contact_email: "test@example.com"
@@ -629,7 +629,7 @@ def test_auth_client_public_installed(
       register: project_result
 
     - name: Create public installed client (thick client)
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "test-desktop-app-{{{{ ansible_date_time.epoch }}}}"
         project_id: "{{{{ project_result.resource_id }}}}"
@@ -671,7 +671,7 @@ def test_auth_client_identity(
   gather_facts: true
   tasks:
     - name: Create or reuse test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-integration-test-project"
         contact_email: "test@example.com"
@@ -683,7 +683,7 @@ def test_auth_client_identity(
       register: project_result
 
     - name: Create client identity
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "test-ci-cd-{{{{ ansible_date_time.epoch }}}}"
         project_id: "{{{{ project_result.resource_id }}}}"
@@ -724,7 +724,7 @@ def test_auth_client_with_file_output(
   gather_facts: true
   tasks:
     - name: Create or reuse test project
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: project
         name: "ansible-integration-test-project"
         contact_email: "test@example.com"
@@ -736,7 +736,7 @@ def test_auth_client_with_file_output(
       register: project_result
 
     - name: Create client with credential file output
-      community.globus.globus_auth:
+      m1yag1.globus.globus_auth:
         resource_type: client
         name: "test-file-output-{{{{ ansible_date_time.epoch }}}}"
         project_id: "{{{{ project_result.resource_id }}}}"

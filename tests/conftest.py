@@ -100,8 +100,17 @@ def _get_tokens_from_s3(config):
 
     try:
         from s3_token_storage import S3TokenStorage
-    except ImportError:
-        pytest.skip("boto3 not installed (required for S3 token storage)")
+    except ImportError as e:
+        # In CI, this is a configuration error and should FAIL, not skip
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            pytest.fail(
+                f"Failed to import s3_token_storage in CI environment: {e}\n"
+                "This indicates a test environment configuration issue.\n"
+                "Check that tests/ is on PYTHONPATH and boto3 is installed."
+            )
+        else:
+            # Local development: skip gracefully
+            pytest.skip(f"S3 token storage not available: {e}")
 
     try:
         storage = S3TokenStorage(

@@ -5,53 +5,45 @@ All notable changes to the Ansible Globus Collection will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2025-11-05
 
 ### Added
-- Nothing yet
+
+- Add Ansible Galaxy publishing support via tox
+- **changelog**: Add automated changelog generation with git-cliff
+- **release**: Add automated release workflow
 
 ### Changed
-- Nothing yet
 
-### Fixed
-- Nothing yet
-
-## [0.1.0] - TBD
-
-### Added
-- Initial Ansible collection for Globus infrastructure management
-- Core modules for managing Globus resources:
-  - `globus_auth` - Manage Globus Auth projects and OAuth clients
-  - `globus_endpoint` - Manage Globus Transfer endpoints
-  - `globus_collection` - Manage data collections on endpoints
-  - `globus_group` - Manage user groups and access control
-  - `globus_compute` - Manage compute endpoints for function execution
-  - `globus_flow` - Manage automation workflows
-- Authentication support for CLI, client credentials, and access token methods
-- Comprehensive test suite with unit, integration, and e2e tests
-- Modern development workflow using uv and tox
-- Ansible Galaxy publishing support via tox environments
-- Documentation including README, developer guide, and contributing guidelines
-
-### Known Limitations
-- Project and OAuth client deletion temporarily disabled due to Globus Auth high-assurance requirement
-  - Users must delete these resources manually at https://app.globus.org/settings/developers
-  - This limitation may be resolved in a future Globus Auth release
-
-### Technical Details
-- Built with Globus SDK 3.0+ for optimal performance and reliability
-- Supports Python 3.12+ and Ansible 2.16+ for modern tooling compatibility
-- Implements declarative, idempotent operations
-- Includes CI/CD pipeline with GitHub Actions
-- Uses ruff for fast linting and formatting
-- Pre-commit hooks for code quality
+- Use tox for CI test environment management
+- Make test paths explicit in tox, remove duplicate -v flags
+- Improve CI/CD workflows for testing and releases
 
 ### Documentation
-- Comprehensive README with authentication setup and examples
-- Developer guide (README-DEV.md) with modern workflow
-- Contributing guidelines (CONTRIBUTING.md)
-- Real-world deployment examples
-- Troubleshooting guide and common solutions
+
+- Clarify deletion limitation is due to temporary Globus Auth bug
+- Add comprehensive release process guide
+
+### Fixed
+
+- Register high_assurance and e2e markers in pytest.ini
+- Add tests directory to Python path for s3_token_storage import
+- Install test dependencies before SDK to prevent conflicts
+- Use editable install in tox to access test support files
+- Use single pytest command in tox to prevent duplicate runs
+- Explicitly set PYTHONPATH in tox for test module imports
+- Use _build directory for Galaxy builds and fix glob expansion
+- Correct GitHub repository URLs in README
+- Ensure clean _build directory in Galaxy tox environments
+- **hooks**: Disable ansible-lint in pre-commit
+- **hooks**: Run ansible-lint via tox in pre-commit
+- **tests**: Add tests directory to Python path for s3_token_storage import
+- **tests**: Fail integration tests in CI when imports fail
+- **tests**: Fail CI when tokens are expired or missing
+- Make token errors fail consistently and add refresh script
+- Correct pytest.ini section header for marker registration
+- Support globus-sdk v4 by making StorageAdapter optional
+- Correct safety check output flag syntax
 
 ---
 
@@ -88,54 +80,24 @@ Each release will include:
 
 ---
 
-## Release Planning
-
-### Version 1.0.0 (Planned)
-**Target**: Initial stable release
-
-**Scope**:
-- All core modules feature-complete
-- Comprehensive test coverage (>90%)
-- Production-ready documentation
-- Performance benchmarks
-- Security review completed
-
-### Version 0.1.0 (Development)
-**Status**: In development
-
-**Scope**:
-- Core module framework
-- Authentication mechanisms
-- Basic test infrastructure
-- Development tooling setup
-
----
-
 ## Contributing to Changelog
 
 When contributing, please:
 
-1. **Update Unreleased section** with your changes
-2. **Use appropriate categories** (Added, Changed, Fixed, etc.)
-3. **Include breaking change notices** in Changed/Removed sections
-4. **Reference issue numbers** where applicable
-5. **Follow semantic versioning** for release planning
+1. **Use conventional commits** (feat:, fix:, docs:, etc.)
+2. **Include scope** for clarity (e.g., `feat(auth): add OAuth support`)
+3. **Reference issue numbers** where applicable
+4. **Follow semantic versioning** for release planning
 
-### Example Entry Format
+### Conventional Commit Types
 
-```markdown
-### Added
-- New `globus_endpoint` parameter `high_assurance` for enhanced security (#123)
-- Support for custom metadata in collections (#145)
-
-### Fixed
-- Fixed authentication token refresh issue (#134)
-- Resolved endpoint creation timeout in large deployments (#156)
-
-### Changed
-- **BREAKING**: Renamed `endpoint_uuid` parameter to `endpoint_id` for consistency (#167)
-  - Migration: Update all playbooks to use `endpoint_id` instead of `endpoint_uuid`
-```
+- `feat`: New features → Minor version bump
+- `fix`: Bug fixes → Patch version bump
+- `docs`: Documentation changes → No version bump
+- `refactor`: Code refactoring → Patch version bump
+- `test`: Test changes → No version bump
+- `chore`: Maintenance tasks → No version bump
+- `BREAKING CHANGE`: Breaking changes → Major version bump
 
 ---
 

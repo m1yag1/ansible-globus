@@ -101,16 +101,12 @@ def _get_tokens_from_s3(config):
     try:
         from s3_token_storage import S3TokenStorage
     except ImportError as e:
-        # In CI, this is a configuration error and should FAIL, not skip
-        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-            pytest.fail(
-                f"Failed to import s3_token_storage in CI environment: {e}\n"
-                "This indicates a test environment configuration issue.\n"
-                "Check that tests/ is on PYTHONPATH and boto3 is installed."
-            )
-        else:
-            # Local development: skip gracefully
-            pytest.skip(f"S3 token storage not available: {e}")
+        # Configuration error - fail consistently in all environments
+        pytest.fail(
+            f"Failed to import s3_token_storage: {e}\n"
+            "This indicates a test environment configuration issue.\n"
+            "Check that tests/ is on PYTHONPATH and boto3 is installed."
+        )
 
     try:
         storage = S3TokenStorage(
@@ -124,18 +120,12 @@ def _get_tokens_from_s3(config):
         tokens = storage.get_all_token_data()
 
         if not tokens:
-            # In CI, missing tokens is a configuration error
-            if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-                pytest.fail(
-                    f"No tokens found in S3: s3://{config['bucket']}/{config['key']} "
-                    f"namespace={config['namespace']}\n\n"
-                    f"Run the token setup script to populate S3 with tokens."
-                )
-            else:
-                pytest.skip(
-                    f"No tokens found in S3: s3://{config['bucket']}/{config['key']} "
-                    f"namespace={config['namespace']}"
-                )
+            # Missing tokens is a configuration error
+            pytest.fail(
+                f"No tokens found in S3: s3://{config['bucket']}/{config['key']} "
+                f"namespace={config['namespace']}\n\n"
+                f"Run the token setup script to populate S3 with tokens."
+            )
 
         # Check if any tokens are expired and refresh them
         from globus_sdk import NativeAppAuthClient
@@ -151,14 +141,11 @@ def _get_tokens_from_s3(config):
                     break
 
         if not client_id:
-            # In CI, this is a configuration error
-            if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-                pytest.fail(
-                    "GLOBUS_CLIENT_ID not set and not found in token metadata.\n"
-                    "This is required for token refresh in CI."
-                )
-            else:
-                pytest.skip("GLOBUS_CLIENT_ID not set and not found in token metadata")
+            # Configuration error
+            pytest.fail(
+                "GLOBUS_CLIENT_ID not set and not found in token metadata.\n"
+                "This is required for token refresh."
+            )
 
         auth_client = NativeAppAuthClient(client_id)
         needs_save = False
@@ -172,19 +159,15 @@ def _get_tokens_from_s3(config):
             if expires_at - current_time < 300:
                 refresh_token = token_data.get("refresh_token")
                 if not refresh_token:
-                    # In CI, this is a data problem and should FAIL
-                    if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-                        pytest.fail(
-                            f"Token for {resource_server} is expired (expires_at={expires_at}, "
-                            f"now={current_time}, diff={expires_at - current_time:.0f}s) "
-                            f"and no refresh token available.\n\n"
-                            f"This means tokens in S3 are stale and need to be refreshed.\n"
-                            f"Run the token setup script to store fresh tokens with refresh tokens."
-                        )
-                    else:
-                        pytest.skip(
-                            f"Token for {resource_server} is expired and no refresh token available"
-                        )
+                    # Data problem - tokens are expired without refresh capability
+                    pytest.fail(
+                        f"Token for {resource_server} is expired (expires_at={expires_at}, "
+                        f"now={current_time}, diff={expires_at - current_time:.0f}s) "
+                        f"and no refresh token available.\n\n"
+                        f"This means tokens in S3 are stale and need to be refreshed.\n"
+                        f"Run: python scripts/refresh_ci_tokens.py\n"
+                        f"Or: python scripts/setup_oauth_tokens.py"
+                    )
 
                 # Refresh the token
                 try:

@@ -160,7 +160,7 @@ def perform_oauth_flow(client_id: str, environment: str = None) -> dict:
 
     # Generate authorization URL
     client.oauth2_start_flow(
-        redirect_uri=redirect_uri, requested_scopes=REQUIRED_SCOPES
+        redirect_uri=redirect_uri, requested_scopes=REQUIRED_SCOPES, refresh_tokens=True
     )
     authorize_url = client.oauth2_get_authorize_url()
 

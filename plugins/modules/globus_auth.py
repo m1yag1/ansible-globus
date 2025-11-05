@@ -116,8 +116,6 @@ options:
         type: str
         choices: ['present', 'absent']
         default: 'present'
-extends_documentation_fragment:
-    - globus_auth
 """
 
 EXAMPLES = r"""

@@ -32,7 +32,13 @@ from datetime import datetime
 import boto3
 from botocore.exceptions import ClientError
 from globus_sdk import OAuthTokenResponse
-from globus_sdk.tokenstorage import StorageAdapter
+
+# SDK v3 vs v4 compatibility: tokenstorage removed in v4
+try:
+    from globus_sdk.tokenstorage import StorageAdapter
+except ImportError:
+    # SDK v4 removed tokenstorage - just use object as base
+    StorageAdapter = object
 
 
 class S3TokenStorage(StorageAdapter):

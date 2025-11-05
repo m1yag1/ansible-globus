@@ -421,6 +421,13 @@ def test_idempotency(ansible_playbook_auth_params, create_playbook, run_playbook
   connection: local
   gather_facts: true
   tasks:
+    - name: Cleanup any existing test group
+      m1yag1.globus.globus_group:
+        name: "ansible-idempotency-test"
+        {ansible_playbook_auth_params}
+        state: absent
+      ignore_errors: true
+
     - name: Create test group
       m1yag1.globus.globus_group:
         name: "ansible-idempotency-test"

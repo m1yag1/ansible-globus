@@ -10,8 +10,10 @@ This script:
 5. Pushes to GitHub
 
 Run via: tox -e release
+Or: python scripts/release.py --commit  # Non-interactive mode
 """
 
+import argparse
 import re
 import subprocess  # nosec B404 - Internal release automation script
 import sys
@@ -122,6 +124,14 @@ def run_galaxy_test():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Complete the release process")
+    parser.add_argument(
+        "--commit",
+        action="store_true",
+        help="Skip confirmation prompt and proceed with release",
+    )
+    args = parser.parse_args()
+
     print("🚀 Completing release...\n")
 
     # Get version
@@ -145,7 +155,7 @@ def main():
     # Run tests
     run_galaxy_test()
 
-    # Confirm before proceeding
+    # Confirm before proceeding (unless --commit flag is used)
     print("\n" + "=" * 60)
     print(f"Ready to release v{version}")
     print("=" * 60)
@@ -156,10 +166,13 @@ def main():
     print("\nGitHub Actions will then automatically publish to Ansible Galaxy.")
     print()
 
-    response = input("Proceed? [y/N] ")
-    if response.lower() != "y":
-        print("Aborted")
-        sys.exit(0)
+    if not args.commit:
+        response = input("Proceed? [y/N] ")
+        if response.lower() != "y":
+            print("Aborted")
+            sys.exit(0)
+    else:
+        print("--commit flag provided, proceeding without confirmation...")
 
     # Git operations
     print("\n📝 Committing changes...")

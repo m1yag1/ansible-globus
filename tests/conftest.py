@@ -11,9 +11,11 @@ from pathlib import Path
 
 import pytest
 
-# Add plugins directory to Python path for imports
+# Add plugins and tests directories to Python path for imports
 plugins_path = Path(__file__).parent.parent / "plugins"
+tests_path = Path(__file__).parent
 sys.path.insert(0, str(plugins_path))
+sys.path.insert(0, str(tests_path))
 
 
 @pytest.fixture(scope="session")

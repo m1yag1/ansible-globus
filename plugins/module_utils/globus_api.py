@@ -55,7 +55,9 @@ class GlobusAPI(GlobusModuleBase):
         """Make GET request to Globus API."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         try:
-            response = requests.get(url, headers=self.headers, params=params)
+            response = requests.get(
+                url, headers=self.headers, params=params, timeout=30
+            )
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -70,7 +72,7 @@ class GlobusAPI(GlobusModuleBase):
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         try:
             # Use json= parameter to let requests handle serialization and Content-Type
-            response = requests.post(url, headers=self.headers, json=data)
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -85,7 +87,7 @@ class GlobusAPI(GlobusModuleBase):
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         try:
             # Use json= parameter to let requests handle serialization and Content-Type
-            response = requests.put(url, headers=self.headers, json=data)
+            response = requests.put(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -97,7 +99,7 @@ class GlobusAPI(GlobusModuleBase):
         """Make DELETE request to Globus API."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         try:
-            response = requests.delete(url, headers=self.headers)
+            response = requests.delete(url, headers=self.headers, timeout=30)
             response.raise_for_status()
             return response.status_code == 204 or response.json()
         except requests.RequestException as e:

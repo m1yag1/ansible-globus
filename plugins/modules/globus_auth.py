@@ -192,7 +192,7 @@ EXAMPLES = r"""
   no_log: true  # Important: credentials contain secrets
 
 - name: Display client credentials (WARNING: Contains secrets!)
-  debug:
+  ansible.builtin.debug:
     msg:
       - "Client ID: {{ service_account.client_id }}"
       - "Client Secret: {{ service_account.client_secret }}"
@@ -472,7 +472,8 @@ def update_project(api, project_id, params):
 def find_policy_by_name(api, project_id, name):
     """Find a policy by display name using SDK."""
     try:
-        response = api.auth_client.get_project_policies(project_id)
+        # Use the auth client's get method to retrieve policies for a project
+        response = api.auth_client.get(f"/v2/api/projects/{project_id}/policies")
         policies = (
             response.data.get("policies", [])
             if hasattr(response, "data")

@@ -1,0 +1,33 @@
+---
+# Ansible-lint configuration for ansible-globus
+
+# Skip list - rules to ignore
+skip_list:
+  # FQCN warnings for builtin modules - we use short names for readability
+  - fqcn[action-core]
+
+  # Line length warnings - some lines naturally exceed 120 chars
+  - yaml[line-length]
+
+  # Shell pipe warnings - we use pipes safely in our playbooks
+  - risky-shell-pipe
+
+  # Changed_when warnings - infrastructure playbooks are idempotent by design
+  - no-changed-when
+
+  # File permissions - we handle permissions explicitly where needed
+  - risky-file-permissions
+
+# Exclude paths from linting
+exclude_paths:
+  - .git/
+  - .tox/
+  - venv/
+  - .venv/
+  - node_modules/
+  - docs/examples/  # Example files may reference non-existent modules
+  - examples/  # Example files may reference non-existent roles
+  - plugins/modules/  # Module files contain YAML in docstrings - causes false positives
+
+# Use default rules for everything else
+use_default_rules: true

@@ -168,7 +168,6 @@ cython_debug/
 # Ansible specific
 *.retry
 .ansible/
-.ansible-lint
 ansible.log
 
 # Ansible Galaxy
@@ -242,6 +241,13 @@ vault-password.txt
 .env.local
 .env.*.local
 local_settings.py
+.auth_policy_id
+.compute_endpoint_id
+.compute_flow_id
+.compute_function_id
+
+# Flow artifacts
+.flows/
 
 # Terraform (if used later)
 *.tfstate

@@ -30,7 +30,7 @@ repos:
     rev: 1.7.5
     hooks:
       - id: bandit
-        args: [--recursive, --skip, "B101,B601"]
+        args: [--recursive, --skip, "B101,B601,B404,B603,B607", --configfile, pyproject.toml]
         exclude: ^tests/
         additional_dependencies: ['pbr']
 

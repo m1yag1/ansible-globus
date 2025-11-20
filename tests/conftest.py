@@ -216,17 +216,31 @@ def _get_tokens_from_client_credentials(config):
     try:
         client = ConfidentialAppAuthClient(config["client_id"], config["client_secret"])
 
-        # Request all required scopes
-        scopes = [
+        # Try all scopes first
+        all_scopes = [
             "urn:globus:auth:scope:transfer.api.globus.org:all",
             "urn:globus:auth:scope:groups.api.globus.org:all",
             "urn:globus:auth:scope:compute.api.globus.org:all",
             "urn:globus:auth:scope:flows.api.globus.org:all",
         ]
 
-        token_response = client.oauth2_client_credentials_tokens(
-            requested_scopes=scopes
-        )
+        try:
+            token_response = client.oauth2_client_credentials_tokens(
+                requested_scopes=all_scopes
+            )
+        except Exception as e:
+            # If client doesn't have all scopes, try with minimal scopes
+            # This handles GCS test clients that only need transfer
+            if "UNKNOWN_SCOPE_ERROR" in str(e):
+                minimal_scopes = [
+                    "urn:globus:auth:scope:transfer.api.globus.org:all",
+                    "urn:globus:auth:scope:groups.api.globus.org:all",
+                ]
+                token_response = client.oauth2_client_credentials_tokens(
+                    requested_scopes=minimal_scopes
+                )
+            else:
+                raise
 
         # Convert to dict format expected by tests
         tokens = {}

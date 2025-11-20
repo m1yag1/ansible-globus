@@ -30,7 +30,7 @@ class GlobusSDKClient(GlobusModuleBase):
     SCOPES: dict[str, str] = {
         "transfer": CompatScopes.transfer_all(),
         "groups": CompatScopes.groups_all(),
-        "compute": "urn:globus:auth:scope:compute.api.globus.org:all",  # Fallback for v3
+        "compute": CompatScopes.compute_all(),
         "flows": CompatScopes.flows_all(),
         "timers": CompatScopes.timers_all(),
         "auth": CompatScopes.auth_manage_projects(),
@@ -107,18 +107,18 @@ class GlobusSDKClient(GlobusModuleBase):
 
             if (
                 "compute" in self.required_services
-                and "compute.api.globus.org" in token_response.by_resource_server
+                and "funcx_service" in token_response.by_resource_server
             ):
-                compute_token = token_response.by_resource_server[
-                    "compute.api.globus.org"
-                ]["access_token"]
+                compute_token = token_response.by_resource_server["funcx_service"][
+                    "access_token"
+                ]
                 self.compute_authorizer = AccessTokenAuthorizer(compute_token)
 
             if (
                 "flows" in self.required_services
-                and "flows.api.globus.org" in token_response.by_resource_server
+                and "flows.globus.org" in token_response.by_resource_server
             ):
-                flows_token = token_response.by_resource_server["flows.api.globus.org"][
+                flows_token = token_response.by_resource_server["flows.globus.org"][
                     "access_token"
                 ]
                 self.flows_authorizer = AccessTokenAuthorizer(flows_token)

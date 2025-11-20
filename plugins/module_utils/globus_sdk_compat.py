@@ -228,6 +228,17 @@ class CompatScopes:
 
         return scope_to_string(AuthScopes.openid)
 
+    @staticmethod
+    def compute_all() -> str:
+        """Get compute:all scope as string."""
+        if IS_V4:
+            from globus_sdk import ComputeClientV2
+
+            return scope_to_string(ComputeClientV2.scopes.all)
+        else:
+            # v3 doesn't have standardized compute scopes
+            return "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all"
+
 
 # Export version information
 __all__ = [

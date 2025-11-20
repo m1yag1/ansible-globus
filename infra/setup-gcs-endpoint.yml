@@ -1,0 +1,255 @@
+---
+# Setup GCS Endpoint and Node for testing infrastructure
+#
+# This playbook sets up the complete static infrastructure that persists across test runs:
+#   - GCS Endpoint + Node (for data transfer)
+#   - HA Authentication Policy (for HA testing)
+#   - HA Multi-User Globus Compute Endpoint (for function execution)
+#
+# Collections and storage gateways are created and cleaned up by individual tests.
+#
+# Usage:
+#   ansible-playbook -i <gcs_host>, infra/setup-gcs-endpoint.yml
+#
+# Environment Variables Required:
+#   GLOBUS_CLIENT_ID - Globus client ID
+#   GLOBUS_CLIENT_SECRET - Globus client secret
+#   GLOBUS_SDK_ENVIRONMENT - Globus environment (test, sandbox, production)
+#   TEST_GCS_PROJECT_ID - GCS project ID (from deployment key)
+#   TEST_GCS_SUBSCRIPTION_ID - GCS subscription ID (must be HA-enabled)
+#
+# Outputs:
+#   Creates .auth_policy_id with TEST_AUTH_POLICY_ID export statement
+#   Creates .compute_endpoint_id with TEST_COMPUTE_ENDPOINT_ID export statement
+#   Both IDs are needed for HA compute functions and flows
+#
+# Prerequisites:
+#   - GCS v5.4+ installed on target host
+#   - Globus Compute endpoint package installed
+#   - Deployment key registered at https://app.globus.org/settings/developers
+#   - HA-enabled subscription
+
+- name: Setup GCS Endpoint
+  hosts: all
+  remote_user: ubuntu
+  become: false
+  gather_facts: true
+  vars:
+    gcs_client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+    gcs_client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+    gcs_sdk_env: "{{ lookup('env', 'GLOBUS_SDK_ENVIRONMENT') | default('test') }}"
+    gcs_project_id: "{{ lookup('env', 'TEST_GCS_PROJECT_ID') }}"
+    gcs_subscription_id: "{{ lookup('env', 'TEST_GCS_SUBSCRIPTION_ID') }}"
+
+  tasks:
+    - name: Validate required environment variables
+      assert:
+        that:
+          - gcs_client_id | length > 0
+          - gcs_client_secret | length > 0
+          - gcs_project_id | length > 0
+          - gcs_subscription_id | length > 0
+        fail_msg: "Missing required environment variables. See playbook header for details."
+
+    - name: Display configuration
+      debug:
+        msg:
+          - "Setting up GCS endpoint on {{ inventory_hostname }}"
+          - "Environment: {{ gcs_sdk_env }}"
+          - "Project ID: {{ gcs_project_id }}"
+
+    - name: Setup GCS endpoint
+      m1yag1.globus.globus_gcs:
+        resource_type: endpoint
+        display_name: "Test GCS Endpoint"
+        organization: "Test Organization"
+        department: "Engineering"
+        description: "Test endpoint for ansible-globus integration testing"
+        contact_email: "test@example.com"
+        project_id: "{{ gcs_project_id }}"
+        subscription_id: "{{ gcs_subscription_id }}"
+        state: present
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{{ gcs_sdk_env }}"
+        GCS_CLI_CLIENT_ID: "{{ gcs_client_id }}"
+        GCS_CLI_CLIENT_SECRET: "{{ gcs_client_secret }}"
+      register: endpoint_result
+
+    - name: Display endpoint result
+      debug:
+        msg:
+          - "Endpoint configured: {{ endpoint_result.changed }}"
+          - "Endpoint ID: {{ endpoint_result.endpoint_id | default('not available') }}"
+
+    - name: Setup GCS node
+      m1yag1.globus.globus_gcs:
+        resource_type: node
+        state: present
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{{ gcs_sdk_env }}"
+        GCS_CLI_CLIENT_ID: "{{ gcs_client_id }}"
+        GCS_CLI_CLIENT_SECRET: "{{ gcs_client_secret }}"
+      become: true
+      register: node_result
+
+    - name: Display node result
+      debug:
+        msg:
+          - "Node configured: {{ node_result.changed }}"
+
+    - name: Get endpoint ID from GCS configuration
+      shell: sudo cat /var/lib/globus-connect-server/info.json | jq -r .endpoint_id
+      register: endpoint_id_output
+      changed_when: false
+
+    - name: Verify endpoint is accessible
+      command: globus-connect-server endpoint show
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{{ gcs_sdk_env }}"
+        GCS_CLI_CLIENT_ID: "{{ gcs_client_id }}"
+        GCS_CLI_CLIENT_SECRET: "{{ gcs_client_secret }}"
+        GCS_CLI_ENDPOINT_ID: "{{ endpoint_id_output.stdout }}"
+      register: endpoint_show
+      changed_when: false
+
+    - name: Create HA authentication policy for testing
+      m1yag1.globus.globus_auth:
+        resource_type: policy
+        name: "Test HA Policy - 3min timeout"
+        project_id: "{{ gcs_project_id }}"
+        description: "Static HA authentication policy for integration testing (3 minute timeout for quick testing)"
+        high_assurance: true
+        authentication_assurance_timeout: 180
+        auth_method: client_credentials
+        client_id: "{{ gcs_client_id }}"
+        client_secret: "{{ gcs_client_secret }}"
+        state: present
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{{ gcs_sdk_env }}"
+      delegate_to: localhost
+      become: false
+      register: auth_policy_result
+
+    - name: Display authentication policy ID
+      debug:
+        msg:
+          - "Authentication Policy ID: {{ auth_policy_result.policy_id }}"
+          - "Set this as TEST_AUTH_POLICY_ID environment variable in GitHub Actions"
+
+    - name: Save policy ID to file for reference
+      copy:
+        content: |
+          # HA Authentication Policy for Testing
+          # Created: {{ ansible_date_time.iso8601 }}
+          # Policy ID: {{ auth_policy_result.policy_id }}
+          #
+          # Set this in your environment:
+          export TEST_AUTH_POLICY_ID="{{ auth_policy_result.policy_id }}"
+        dest: "{{ playbook_dir }}/../.auth_policy_id"
+      delegate_to: localhost
+      become: false
+
+    - name: Create identity mapping for Globus Compute endpoint
+      copy:
+        content: |
+          [
+            {
+              "DATA_TYPE": "expression_identity_mapping#1.0.0",
+              "mappings": [
+                {
+                  "source": "{username}",
+                  "match": "^art$",
+                  "output": "ubuntu"
+                },
+                {
+                  "source": "{id}",
+                  "match": "^{{ gcs_client_id }}$",
+                  "output": "ubuntu"
+                },
+                {
+                  "source": "{username}",
+                  "match": "(.*)",
+                  "output": "{0}"
+                }
+              ]
+            }
+          ]
+        dest: /tmp/compute_identity_mapping.json
+        mode: '0644'
+      become: true
+
+    - name: Check if Globus Compute endpoint exists
+      stat:
+        path: /opt/globus-compute/ha-endpoint/config.yaml
+      register: compute_endpoint_config
+      become: true
+
+    - name: Configure HA multi-user Globus Compute endpoint
+      shell: |
+        mkdir -p /opt/globus-compute
+        cd /opt/globus-compute
+        globus-compute-endpoint configure ha-endpoint --multi-user
+      become: true
+      when: not compute_endpoint_config.stat.exists
+
+    - name: Configure endpoint with HA settings
+      blockinfile:
+        path: /opt/globus-compute/ha-endpoint/config.yaml
+        marker: "# {mark} ANSIBLE MANAGED HA CONFIGURATION"
+        block: |
+          subscription_id: {{ gcs_subscription_id }}
+          high_assurance: true
+          authentication_policy: {{ auth_policy_result.policy_id }}
+          identity_mapping_config_path: /tmp/compute_identity_mapping.json
+      become: true
+
+    - name: Enable Globus Compute endpoint as systemd service
+      shell: |
+        cd /opt/globus-compute
+        globus-compute-endpoint enable-on-boot ha-endpoint
+      become: true
+      when: not compute_endpoint_config.stat.exists
+
+    - name: Start Globus Compute endpoint
+      systemd:
+        name: globus-compute-endpoint-ha-endpoint
+        state: started
+        enabled: true
+      become: true
+
+    - name: Get Globus Compute endpoint UUID
+      shell: |
+        cat /opt/globus-compute/ha-endpoint/endpoint.json | jq -r .endpoint_id
+      register: compute_endpoint_id
+      become: true
+      changed_when: false
+
+    - name: Save compute endpoint ID to file for reference
+      copy:
+        content: |
+          # HA Globus Compute Endpoint for Testing
+          # Created: {{ ansible_date_time.iso8601 }}
+          # Endpoint ID: {{ compute_endpoint_id.stdout }}
+          #
+          # Set this in your environment:
+          export TEST_COMPUTE_ENDPOINT_ID="{{ compute_endpoint_id.stdout }}"
+        dest: "{{ playbook_dir }}/../.compute_endpoint_id"
+      delegate_to: localhost
+      become: false
+
+    - name: Display setup completion
+      debug:
+        msg:
+          - "✅ GCS endpoint, node, HA auth policy, and HA compute endpoint setup complete!"
+          - "GCS Endpoint ID: {{ endpoint_id_output.stdout }}"
+          - "Auth Policy ID: {{ auth_policy_result.policy_id }}"
+          - "Compute Endpoint ID: {{ compute_endpoint_id.stdout }}"
+          - ""
+          - "Environment variables for testing:"
+          - "  export TEST_AUTH_POLICY_ID={{ auth_policy_result.policy_id }}"
+          - "  export TEST_COMPUTE_ENDPOINT_ID={{ compute_endpoint_id.stdout }}"
+          - ""
+          - "Next steps:"
+          - "  - Add TEST_AUTH_POLICY_ID and TEST_COMPUTE_ENDPOINT_ID to GitHub Actions secrets"
+          - "  - Run integration tests to create collections and gateways"
+          - "  - Use infra/cleanup-gcs-resources.yml to clean up test resources"

@@ -785,5 +785,292 @@ def test_auth_client_with_file_output(
 # For now, users must delete these resources manually at https://app.globus.org/settings/developers
 
 
+@pytest.mark.compute
+def test_compute_endpoint_lifecycle(
+    gcs_host, gcs_subscription_id, create_playbook, run_playbook
+):
+    """Test full compute endpoint lifecycle including creation, idempotency, and deletion."""
+    client_id = os.getenv("GLOBUS_CLIENT_ID")
+    client_secret = os.getenv("GLOBUS_CLIENT_SECRET")
+    sdk_env = os.getenv("GLOBUS_SDK_ENVIRONMENT", "production")
+    endpoint_name = "ansible-test-compute"
+
+    playbook_content = f"""
+---
+- hosts: {gcs_host}
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  tasks:
+    # Cleanup from previous test failures
+    - name: Delete any existing test endpoint (cleanup)
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        state: absent
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      ignore_errors: true
+      register: cleanup_result
+
+    - name: Create test compute endpoint
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        display_name: "Ansible Test Compute Endpoint"
+        subscription_id: "{gcs_subscription_id}"
+        state: present
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: create_result
+
+    - name: Verify endpoint was created
+      assert:
+        that:
+          - create_result.changed
+          - create_result.endpoint_id is defined
+          - create_result.name == "{endpoint_name}"
+
+    - name: Create same endpoint again (idempotency check)
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        display_name: "Ansible Test Compute Endpoint"
+        subscription_id: "{gcs_subscription_id}"
+        state: present
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: idempotent_result
+
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_result.changed
+          - idempotent_result.endpoint_id == create_result.endpoint_id
+
+    - name: Delete test compute endpoint
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        state: absent
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: delete_result
+
+    - name: Verify endpoint was deleted
+      assert:
+        that:
+          - delete_result.changed
+          - delete_result.api_deleted is defined
+          - delete_result.api_deleted == true
+"""
+
+    playbook_path = create_playbook(playbook_content, "test_compute_lifecycle.yml")
+    result = run_playbook(playbook_path)
+
+    assert result.returncode == 0, f"Playbook failed: {result.stderr}"
+
+
+@pytest.mark.compute
+def test_compute_function_lifecycle(
+    gcs_host, gcs_subscription_id, create_playbook, run_playbook
+):
+    """Test full function lifecycle with endpoint creation, function registration, idempotency, and cleanup."""
+    client_id = os.getenv("GLOBUS_CLIENT_ID")
+    client_secret = os.getenv("GLOBUS_CLIENT_SECRET")
+    sdk_env = os.getenv("GLOBUS_SDK_ENVIRONMENT", "production")
+    endpoint_name = "ansible-test-function-endpoint"
+    function_name = "ansible-test-function"
+
+    # Simple test function code
+    function_code = """
+def hello_world():
+    return "Hello from Ansible test function!"
+"""
+
+    playbook_content = f"""
+---
+- hosts: {gcs_host}
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  tasks:
+    # Cleanup endpoint from previous test failures
+    - name: Delete any existing test endpoint (cleanup)
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        state: absent
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      ignore_errors: true
+      register: endpoint_cleanup_result
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    # Cleanup function from previous test failures
+    - name: Delete any existing test function (cleanup)
+      m1yag1.globus.globus_compute:
+        resource_type: function
+        name: "{function_name}"
+        state: absent
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      ignore_errors: true
+      register: function_cleanup_result
+
+- hosts: {gcs_host}
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  tasks:
+    # Create the endpoint
+    - name: Create test compute endpoint
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        display_name: "Ansible Test Function Endpoint"
+        subscription_id: "{gcs_subscription_id}"
+        state: present
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: endpoint_create_result
+
+    - name: Verify endpoint was created
+      assert:
+        that:
+          - endpoint_create_result.changed
+          - endpoint_create_result.endpoint_id is defined
+          - endpoint_create_result.name == "{endpoint_name}"
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    # Register function to the endpoint
+    - name: Register test compute function
+      m1yag1.globus.globus_compute:
+        resource_type: function
+        name: "{function_name}"
+        endpoint_id: "{{{{ hostvars['{gcs_host}']['endpoint_create_result']['endpoint_id'] }}}}"
+        function_code: |
+{function_code}
+        description: "Ansible integration test function"
+        state: present
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: register_result
+
+    - name: Verify function was registered
+      assert:
+        that:
+          - register_result.changed
+          - register_result.function_id is defined
+          - register_result.name == "{function_name}"
+
+    - name: Register same function again (idempotency check)
+      m1yag1.globus.globus_compute:
+        resource_type: function
+        name: "{function_name}"
+        endpoint_id: "{{{{ hostvars['{gcs_host}']['endpoint_create_result']['endpoint_id'] }}}}"
+        function_code: |
+{function_code}
+        description: "Ansible integration test function"
+        state: present
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: idempotent_result
+
+    - name: Verify idempotency
+      assert:
+        that:
+          - not idempotent_result.changed
+          - idempotent_result.function_id == register_result.function_id
+
+    - name: Delete test compute function
+      m1yag1.globus.globus_compute:
+        resource_type: function
+        name: "{function_name}"
+        state: absent
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: delete_result
+
+    - name: Verify function was deleted
+      assert:
+        that:
+          - delete_result.changed
+
+- hosts: {gcs_host}
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  tasks:
+    # Clean up the endpoint
+    - name: Delete test compute endpoint
+      m1yag1.globus.globus_compute:
+        name: "{endpoint_name}"
+        state: absent
+        manage_system: true
+      environment:
+        GLOBUS_COMPUTE_CLIENT_ID: "{client_id}"
+        GLOBUS_COMPUTE_CLIENT_SECRET: "{client_secret}"
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+      register: endpoint_delete_result
+
+    - name: Verify endpoint was deleted
+      assert:
+        that:
+          - endpoint_delete_result.changed
+          - endpoint_delete_result.api_deleted is defined
+          - endpoint_delete_result.api_deleted == true
+"""
+
+    playbook_path = create_playbook(playbook_content, "test_function_lifecycle.yml")
+    result = run_playbook(playbook_path)
+
+    assert result.returncode == 0, f"Playbook failed: {result.stderr}"
+
+
+@pytest.fixture(scope="module")
+def gcs_host():
+    """Get GCS test host from environment."""
+    host = os.getenv("TEST_GCS_HOST")
+    if not host:
+        pytest.skip("TEST_GCS_HOST environment variable not set")
+    return host
+
+
+@pytest.fixture(scope="module")
+def gcs_subscription_id():
+    """Get GCS subscription ID for compute endpoint."""
+    subscription_id = os.getenv(
+        "TEST_GCS_SUBSCRIPTION_ID", "923ac990-9914-11ed-af9f-c53a64a5b6b4"
+    )
+    return subscription_id
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -2,7 +2,7 @@
 
 DOCUMENTATION = r"""
 ---
-module: globus_flow
+module: globus_flows
 short_description: Manage Globus Flows
 description:
     - Create, update, or delete Globus Flows
@@ -71,7 +71,7 @@ extends_documentation_fragment:
 
 EXAMPLES = r"""
 - name: Create a Globus Flow
-  globus_flow:
+  globus_flows:
     title: "Data Processing Pipeline"
     subtitle: "Automated data processing and analysis"
     description: "Processes raw data through multiple stages"
@@ -96,13 +96,13 @@ EXAMPLES = r"""
     state: present
 
 - name: Create flow from file
-  globus_flow:
+  globus_flows:
     title: "File Transfer Flow"
     definition_file: "/path/to/flow_definition.json"
     state: present
 
 - name: Delete a flow
-  globus_flow:
+  globus_flows:
     title: "Old Flow"
     state: absent
 """
@@ -229,7 +229,8 @@ def create_flow(api, params):
 def update_flow(api, flow_id, params):
     """Update an existing flow using SDK."""
     try:
-        flow_data = {}
+        # Prepare kwargs for update_flow (SDK v4 uses individual keyword arguments)
+        update_kwargs = {}
 
         # Map module parameter names to API field names for updatable fields
         field_mapping = {
@@ -244,17 +245,17 @@ def update_flow(api, flow_id, params):
 
         for module_field, api_field in field_mapping.items():
             if params.get(module_field) is not None:
-                flow_data[api_field] = params[module_field]
+                update_kwargs[api_field] = params[module_field]
 
         # Definition updates require special handling
         if params.get("definition") is not None:
-            flow_data["definition"] = params["definition"]
+            update_kwargs["definition"] = params["definition"]
 
         if params.get("input_schema") is not None:
-            flow_data["input_schema"] = params["input_schema"]
+            update_kwargs["input_schema"] = params["input_schema"]
 
-        if flow_data:
-            response = api.flows_client.update_flow(flow_id, data=flow_data)
+        if update_kwargs:
+            response = api.flows_client.update_flow(flow_id, **update_kwargs)
             return response.data
         return None
     except Exception as e:

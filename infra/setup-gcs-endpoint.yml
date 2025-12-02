@@ -21,7 +21,12 @@
 # Outputs:
 #   Creates .auth_policy_id with TEST_AUTH_POLICY_ID export statement
 #   Creates .compute_endpoint_id with TEST_COMPUTE_ENDPOINT_ID export statement
+#   Creates .gcs_ssh_private_key with the private key for GitHub Actions
 #   Both IDs are needed for HA compute functions and flows
+#
+# GitHub Actions SSH Setup:
+#   After running this playbook, add the SSH private key to GitHub secrets:
+#     cat .gcs_ssh_private_key | gh secret set GCS_SSH_PRIVATE_KEY
 #
 # Prerequisites:
 #   - GCS v5.4+ installed on target host
@@ -58,6 +63,117 @@
           - "Environment: {{ gcs_sdk_env }}"
           - "Project ID: {{ gcs_project_id }}"
 
+    # =========================================================================
+    # Security Group Setup for GitHub Actions SSH Access
+    # =========================================================================
+    # Note: GitHub Actions uses ~3000+ IP ranges which exceeds AWS security group
+    # limits (~60 rules). We allow SSH from anywhere since:
+    # 1. SSH key authentication is required (no password auth)
+    # 2. This is test infrastructure, not production
+    # 3. The SSH key is stored securely in GitHub Secrets
+    # =========================================================================
+    - name: Get instance security group
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:Name": "ansible-test-gcs-01"
+        region: "{{ lookup('env', 'AWS_REGION') | default('us-east-1') }}"
+      register: ec2_info
+      delegate_to: localhost
+      become: false
+
+    - name: Extract security group ID
+      set_fact:
+        security_group_id: "{{ ec2_info.instances[0].security_groups[0].group_id }}"
+      when: ec2_info.instances | length > 0
+
+    - name: Allow SSH access for CI (key-based auth required)
+      amazon.aws.ec2_security_group:
+        name: "{{ ec2_info.instances[0].security_groups[0].group_name }}"
+        group_id: "{{ security_group_id }}"
+        description: "Security group for GCS test instance"
+        vpc_id: "{{ ec2_info.instances[0].vpc_id }}"
+        region: "{{ lookup('env', 'AWS_REGION') | default('us-east-1') }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "SSH for GitHub Actions CI"
+        rules_egress: []
+        purge_rules: false
+        purge_rules_egress: false
+      delegate_to: localhost
+      become: false
+      when: security_group_id is defined
+
+    - name: Display security group update status
+      debug:
+        msg:
+          - "✅ Security group {{ security_group_id }} updated for SSH access"
+          - "SSH allowed from 0.0.0.0/0 (key-based authentication required)"
+      when: security_group_id is defined
+
+    # =========================================================================
+    # SSH Key Setup for GitHub Actions CI
+    # =========================================================================
+    - name: Check if GitHub Actions SSH key exists
+      stat:
+        path: /home/ubuntu/.ssh/github_actions_ed25519
+      register: github_actions_key
+
+    - name: Generate SSH key pair for GitHub Actions
+      command: >
+        ssh-keygen -t ed25519 -f /home/ubuntu/.ssh/github_actions_ed25519
+        -C "github-actions-ansible-globus" -N ""
+      args:
+        creates: /home/ubuntu/.ssh/github_actions_ed25519
+      when: not github_actions_key.stat.exists
+      register: ssh_key_generated
+
+    - name: Set correct permissions on private key
+      file:
+        path: /home/ubuntu/.ssh/github_actions_ed25519
+        mode: '0600'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Read public key
+      slurp:
+        src: /home/ubuntu/.ssh/github_actions_ed25519.pub
+      register: github_actions_pubkey
+
+    - name: Ensure public key is in authorized_keys
+      ansible.posix.authorized_key:
+        user: ubuntu
+        state: present
+        key: "{{ github_actions_pubkey.content | b64decode }}"
+
+    - name: Read private key
+      slurp:
+        src: /home/ubuntu/.ssh/github_actions_ed25519
+      register: github_actions_privkey
+
+    - name: Save private key locally for GitHub secret
+      copy:
+        content: "{{ github_actions_privkey.content | b64decode }}"
+        dest: "{{ playbook_dir }}/../.gcs_ssh_private_key"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+
+    - name: Display SSH key setup instructions
+      debug:
+        msg:
+          - "✅ SSH key for GitHub Actions configured"
+          - ""
+          - "To add the private key to GitHub secrets, run:"
+          - "  cat .gcs_ssh_private_key | gh secret set GCS_SSH_PRIVATE_KEY"
+          - ""
+          - "The key has been saved to: .gcs_ssh_private_key"
+
+    # =========================================================================
+    # GCS Endpoint Setup
+    # =========================================================================
     - name: Setup GCS endpoint
       m1yag1.globus.globus_gcs:
         resource_type: endpoint

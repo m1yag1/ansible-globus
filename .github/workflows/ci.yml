@@ -140,6 +140,16 @@ jobs:
         run: |
           ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
+      - name: Setup SSH for GCS instance
+        env:
+          GCS_SSH_PRIVATE_KEY: ${{ secrets.GCS_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$GCS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Add GCS instance to known_hosts (IP discovered dynamically by tests)
+          # Using StrictHostKeyChecking=accept-new in ansible.cfg instead
+
       - name: Run integration tests with tox
         env:
           S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}

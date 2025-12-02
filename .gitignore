@@ -245,6 +245,7 @@ local_settings.py
 .compute_endpoint_id
 .compute_flow_id
 .compute_function_id
+.gcs_ssh_private_key
 
 # Flow artifacts
 .flows/

@@ -86,7 +86,29 @@ Add these 5 secrets (values from step 1 output):
 | `S3_TOKEN_KEY` | `globus/ci-tokens.json` |
 | `S3_TOKEN_NAMESPACE` | `ci` |
 
-### 5. Test It!
+### 5. Setup GCS Instance for Integration Tests
+
+The GCS integration tests require SSH access to an EC2 instance running Globus Connect Server.
+
+Run the setup playbook against your GCS instance:
+```bash
+# Ensure AWS credentials are available (for security group updates)
+aws-vault exec your-profile -- \
+  ansible-playbook -i <gcs-instance-ip>, infra/setup-gcs-endpoint.yml
+```
+
+This playbook automatically:
+- Fetches GitHub Actions IP ranges from `https://api.github.com/meta`
+- Adds them to the EC2 security group for SSH access
+- Generates an SSH key pair for GitHub Actions
+- Saves the private key locally to `.gcs_ssh_private_key`
+
+Then add the SSH key to GitHub secrets:
+```bash
+cat .gcs_ssh_private_key | gh secret set GCS_SSH_PRIVATE_KEY
+```
+
+### 6. Test It!
 
 ```bash
 # Push to main branch to trigger integration tests

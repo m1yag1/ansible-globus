@@ -91,7 +91,7 @@ def globus_tokens(globus_auth_config):
         print("DEBUG: Calling _get_tokens_from_cli")
         return _get_tokens_from_cli()
     else:
-        pytest.skip(f"Unknown auth method: {auth_method}")
+        pytest.fail(f"Unknown auth method: {auth_method}")
 
 
 def _get_tokens_from_s3(config):
@@ -195,7 +195,7 @@ def _get_tokens_from_s3(config):
                         needs_save = True
 
                 except Exception as e:
-                    pytest.skip(f"Failed to refresh token for {resource_server}: {e}")
+                    pytest.fail(f"Failed to refresh token for {resource_server}: {e}")
 
         # Save refreshed tokens back to S3
         if needs_save:
@@ -209,7 +209,7 @@ def _get_tokens_from_s3(config):
         return tokens
 
     except Exception as e:
-        pytest.skip(f"Failed to retrieve tokens from S3: {e}")
+        pytest.fail(f"Failed to retrieve tokens from S3: {e}")
 
 
 def _get_tokens_from_client_credentials(config):
@@ -258,7 +258,7 @@ def _get_tokens_from_client_credentials(config):
         return tokens
 
     except Exception as e:
-        pytest.skip(f"Failed to get tokens via client credentials: {e}")
+        pytest.fail(f"Failed to get tokens via client credentials: {e}")
 
 
 def _get_tokens_from_cli():
@@ -315,7 +315,7 @@ def _get_auth_params_for_service(globus_auth_config, globus_tokens, service):
         # Use access token for the specific service
         resource_server = service_to_resource_server.get(service)
         if not resource_server:
-            pytest.skip(f"Unknown service: {service}")
+            pytest.fail(f"Unknown service: {service}")
 
         token_data = globus_tokens.get(resource_server, {})
         access_token = token_data.get("access_token")
@@ -324,7 +324,7 @@ def _get_auth_params_for_service(globus_auth_config, globus_tokens, service):
             return f"""auth_method: access_token
         access_token: {access_token}"""
         else:
-            pytest.skip(f"No {service} token available")
+            pytest.fail(f"No {service} token available")
 
     elif auth_method == "client_credentials":
         return f"""auth_method: client_credentials

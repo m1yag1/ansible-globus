@@ -109,6 +109,9 @@ def gcs_subscription_id():
     return subscription_id
 
 
+@pytest.mark.skip(
+    reason="Endpoint is static infrastructure - set up via infra/setup-gcs-endpoint.yml"
+)
 def test_gcs_endpoint_setup(
     gcs_host,
     gcs_project_id,
@@ -121,6 +124,10 @@ def test_gcs_endpoint_setup(
 
     This test sets up a GCS endpoint using the globus_gcs module.
     Requires GCS_CLI_CLIENT_ID and GCS_CLI_CLIENT_SECRET environment variables.
+
+    NOTE: This test is skipped because the endpoint is static infrastructure
+    that should be set up once via infra/setup-gcs-endpoint.yml, not recreated
+    by each test run.
     """
     # Get client credentials from environment
     client_id = os.getenv("GLOBUS_CLIENT_ID")
@@ -176,6 +183,9 @@ def test_gcs_endpoint_setup(
     assert result.returncode == 0, f"Playbook failed: {result.stderr}"
 
 
+@pytest.mark.skip(
+    reason="Node is static infrastructure - set up via infra/setup-gcs-endpoint.yml"
+)
 @pytest.mark.slow
 @pytest.mark.gcs
 def test_gcs_node_setup(
@@ -187,6 +197,9 @@ def test_gcs_node_setup(
     Test GCS node setup.
 
     This test sets up a GCS node which configures GridFTP, Apache, and certificates.
+
+    NOTE: This test is skipped because the node is static infrastructure
+    that should be set up once via infra/setup-gcs-endpoint.yml.
     Marked as slow because it takes several minutes and requires sudo.
     Requires an endpoint to already be configured.
     """

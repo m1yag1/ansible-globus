@@ -157,8 +157,11 @@ jobs:
           S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
+          GLOBUS_CLIENT_SECRET: ${{ secrets.GLOBUS_CLIENT_SECRET }}
           GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
           GLOBUS_SDK_ENVIRONMENT: test
+          TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}
+          TEST_GCS_SUBSCRIPTION_ID: ${{ secrets.GLOBUS_SUBSCRIPTION_ID }}
         run: |
           tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance"
 

@@ -1,0 +1,66 @@
+name: Refresh CI Tokens
+
+on:
+  # Run weekly on Monday at 6 AM UTC to keep refresh tokens active
+  schedule:
+    - cron: '0 6 * * 1'
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  refresh-tokens:
+    name: Refresh Globus OAuth Tokens
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for AWS OIDC
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install globus-sdk boto3
+
+      - name: Refresh tokens
+        env:
+          S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
+          S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
+          S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
+          GLOBUS_SDK_ENVIRONMENT: test
+        run: |
+          python scripts/refresh_ci_tokens.py
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Token refresh failed! Refresh tokens may have expired."
+          echo "::error::Manual intervention required: run scripts/setup_oauth_tokens.py locally"
+          echo ""
+          echo "To fix:"
+          echo "1. Run locally with your Globus account:"
+          echo "   aws-vault exec globus-dev -- python scripts/setup_oauth_tokens.py \\"
+          echo "     --client-id \$GLOBUS_CLIENT_ID \\"
+          echo "     --bucket \$S3_TOKEN_BUCKET \\"
+          echo "     --namespace github-actions \\"
+          echo "     --environment test"
+          echo ""
+          echo "2. This will open a browser for Globus authentication"
+          echo "3. New tokens (with refresh tokens) will be stored in S3"

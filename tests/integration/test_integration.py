@@ -201,7 +201,7 @@ def test_flow_management_with_file(
   gather_facts: true
   tasks:
     - name: Create test flow from file
-      m1yag1.globus.globus_flow:
+      m1yag1.globus.globus_flows:
         title: "ansible-test-flow-{{{{ ansible_date_time.epoch }}}}"
         subtitle: "Test flow from file"
         description: "Test flow created by Ansible integration test"
@@ -223,7 +223,7 @@ def test_flow_management_with_file(
           - flow_result.title is defined
 
     - name: Delete test flow
-      m1yag1.globus.globus_flow:
+      m1yag1.globus.globus_flows:
         title: "{{{{ flow_result.title }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent
@@ -327,7 +327,7 @@ def test_flow_timer(
   gather_facts: true
   tasks:
     - name: Create test flow for timer
-      m1yag1.globus.globus_flow:
+      m1yag1.globus.globus_flows:
         title: "ansible-timer-flow-{{{{ ansible_date_time.epoch }}}}"
         subtitle: "Flow triggered by timer"
         description: "Test flow for timer integration"
@@ -395,7 +395,7 @@ def test_flow_timer(
           - timer_delete.changed
 
     - name: Delete flow
-      m1yag1.globus.globus_flow:
+      m1yag1.globus.globus_flows:
         title: "{{{{ flow_result.title }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent

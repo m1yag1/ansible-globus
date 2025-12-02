@@ -70,6 +70,24 @@ def aws_gcs_instance_discovery():
 
 
 @pytest.fixture(scope="session")
+def sdk_version():
+    """
+    Get the current Globus SDK major version.
+
+    Used to create unique resource names per SDK version when tests
+    run in parallel (e.g., SDK 3 and SDK 4 integration tests).
+    """
+    try:
+        import globus_sdk
+
+        version = globus_sdk.__version__
+        major = version.split(".")[0]
+        return f"sdk{major}"
+    except ImportError:
+        return "sdk0"
+
+
+@pytest.fixture(scope="session")
 def test_user_identity():
     """
     Get the current test user's Globus identity.

@@ -51,6 +51,23 @@ import pytest
 pytestmark = pytest.mark.gcs
 
 
+def _get_sdk_suffix():
+    """Get SDK version suffix for unique resource names."""
+    try:
+        import globus_sdk
+
+        version = globus_sdk.__version__
+        major = version.split(".")[0]
+        return f"-sdk{major}"
+    except ImportError:
+        return ""
+
+
+# Get SDK suffix at module load time - used in resource names to avoid
+# race conditions when SDK 3 and SDK 4 tests run in parallel
+SDK_SUFFIX = _get_sdk_suffix()
+
+
 @pytest.fixture(scope="module")
 def gcs_host(aws_gcs_instance_discovery):
     """
@@ -266,7 +283,7 @@ def test_gcs_storage_gateway_create(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test POSIX Gateway"
+        display_name: "Test POSIX Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -312,7 +329,7 @@ def test_gcs_storage_gateway_create(
     - name: Create POSIX storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test POSIX Gateway"
+        display_name: "Test POSIX Gateway{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping.json
         state: present
@@ -327,7 +344,7 @@ def test_gcs_storage_gateway_create(
         that:
           - gateway_result.changed
           - gateway_result.storage_gateway_id is defined
-          - gateway_result.display_name == "Test POSIX Gateway"
+          - "'Test POSIX Gateway' in gateway_result.display_name"
           - gateway_result.storage_type is defined
 
     - name: Display gateway details
@@ -340,7 +357,7 @@ def test_gcs_storage_gateway_create(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test POSIX Gateway"
+        display_name: "Test POSIX Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -380,7 +397,7 @@ def test_gcs_storage_gateway_idempotency(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test Idempotent Gateway"
+        display_name: "Test Idempotent Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -412,7 +429,7 @@ def test_gcs_storage_gateway_idempotency(
     - name: Create POSIX storage gateway (first time)
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test Idempotent Gateway"
+        display_name: "Test Idempotent Gateway{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-idem.json
         state: present
@@ -425,7 +442,7 @@ def test_gcs_storage_gateway_idempotency(
     - name: Create same storage gateway (second time)
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test Idempotent Gateway"
+        display_name: "Test Idempotent Gateway{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-idem.json
         state: present
@@ -446,7 +463,7 @@ def test_gcs_storage_gateway_idempotency(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Test Idempotent Gateway"
+        display_name: "Test Idempotent Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -486,7 +503,7 @@ def test_gcs_collection_create(
     - name: Delete existing test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Test Collection"
+        display_name: "Test Collection{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -497,7 +514,7 @@ def test_gcs_collection_create(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Collection Test"
+        display_name: "Gateway for Collection Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -529,7 +546,7 @@ def test_gcs_collection_create(
     - name: Create storage gateway for collection
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Collection Test"
+        display_name: "Gateway for Collection Test{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-collection.json
         state: present
@@ -542,7 +559,7 @@ def test_gcs_collection_create(
     - name: Create mapped collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Test Collection"
+        display_name: "Test Collection{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         description: "Test collection for integration tests"
@@ -560,7 +577,7 @@ def test_gcs_collection_create(
         that:
           - collection_result.changed
           - collection_result.collection_id is defined
-          - collection_result.display_name == "Test Collection"
+          - "'Test Collection' in collection_result.display_name"
 
     - name: Display collection details
       debug:
@@ -572,7 +589,7 @@ def test_gcs_collection_create(
     - name: Delete test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Test Collection"
+        display_name: "Test Collection{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -583,7 +600,7 @@ def test_gcs_collection_create(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Collection Test"
+        display_name: "Gateway for Collection Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -621,7 +638,7 @@ def test_gcs_collection_update(
     - name: Delete existing test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection to Update"
+        display_name: "Collection to Update{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -632,7 +649,7 @@ def test_gcs_collection_update(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Update Test"
+        display_name: "Gateway for Update Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -664,7 +681,7 @@ def test_gcs_collection_update(
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Update Test"
+        display_name: "Gateway for Update Test{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-collection-update.json
         state: present
@@ -677,7 +694,7 @@ def test_gcs_collection_update(
     - name: Create collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection to Update"
+        display_name: "Collection to Update{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         description: "Original description"
@@ -693,7 +710,7 @@ def test_gcs_collection_update(
       m1yag1.globus.globus_gcs:
         resource_type: collection
         collection_id: "{{{{ create_result.collection_id }}}}"
-        display_name: "Collection to Update"
+        display_name: "Collection to Update{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         description: "Updated description"
@@ -715,7 +732,7 @@ def test_gcs_collection_update(
     - name: Delete test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection to Update"
+        display_name: "Collection to Update{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -726,7 +743,7 @@ def test_gcs_collection_update(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Update Test"
+        display_name: "Gateway for Update Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -766,7 +783,7 @@ def test_gcs_role_assignment(
     - name: Delete existing test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Test"
+        display_name: "Collection for Role Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -777,7 +794,7 @@ def test_gcs_role_assignment(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Test"
+        display_name: "Gateway for Role Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -809,7 +826,7 @@ def test_gcs_role_assignment(
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Test"
+        display_name: "Gateway for Role Test{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-roles.json
         state: present
@@ -822,7 +839,7 @@ def test_gcs_role_assignment(
     - name: Create collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Test"
+        display_name: "Collection for Role Test{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         delete_protection: false
@@ -862,7 +879,7 @@ def test_gcs_role_assignment(
     - name: Delete test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Test"
+        display_name: "Collection for Role Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -873,7 +890,7 @@ def test_gcs_role_assignment(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Test"
+        display_name: "Gateway for Role Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -914,7 +931,7 @@ def test_gcs_role_idempotency(
     - name: Delete existing test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Idempotency"
+        display_name: "Collection for Role Idempotency{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -925,7 +942,7 @@ def test_gcs_role_idempotency(
     - name: Delete existing test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Idempotency Test"
+        display_name: "Gateway for Role Idempotency Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -957,7 +974,7 @@ def test_gcs_role_idempotency(
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Idempotency Test"
+        display_name: "Gateway for Role Idempotency Test{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/identity-mapping-roles-idem.json
         state: present
@@ -970,7 +987,7 @@ def test_gcs_role_idempotency(
     - name: Create collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Idempotency"
+        display_name: "Collection for Role Idempotency{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         delete_protection: false
@@ -1017,7 +1034,7 @@ def test_gcs_role_idempotency(
     - name: Delete test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "Collection for Role Idempotency"
+        display_name: "Collection for Role Idempotency{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -1028,7 +1045,7 @@ def test_gcs_role_idempotency(
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "Gateway for Role Idempotency Test"
+        display_name: "Gateway for Role Idempotency Test{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -1070,7 +1087,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Delete existing HA test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "HA Test Collection"
+        display_name: "HA Test Collection{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -1081,7 +1098,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Delete existing HA test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "HA Test Gateway"
+        display_name: "HA Test Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -1119,7 +1136,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Create HA storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "HA Test Gateway"
+        display_name: "HA Test Gateway{SDK_SUFFIX}"
         storage_type: posix
         identity_mapping: /tmp/ha-identity-mapping.json
         high_assurance: true
@@ -1137,7 +1154,7 @@ def test_gcs_ha_storage_gateway_and_collection(
         that:
           - ha_gateway_result.changed
           - ha_gateway_result.storage_gateway_id is defined
-          - ha_gateway_result.display_name == "HA Test Gateway"
+          - "'HA Test Gateway' in ha_gateway_result.display_name"
 
     - name: Display HA gateway details
       debug:
@@ -1148,7 +1165,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Create HA collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "HA Test Collection"
+        display_name: "HA Test Collection{SDK_SUFFIX}"
         storage_gateway_id: "{{{{ ha_gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
         description: "High assurance collection for testing HA transfers"
@@ -1167,7 +1184,7 @@ def test_gcs_ha_storage_gateway_and_collection(
         that:
           - ha_collection_result.changed
           - ha_collection_result.collection_id is defined
-          - ha_collection_result.display_name == "HA Test Collection"
+          - "'HA Test Collection' in ha_collection_result.display_name"
 
     - name: Display HA collection details
       debug:
@@ -1179,7 +1196,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Delete HA test collection
       m1yag1.globus.globus_gcs:
         resource_type: collection
-        display_name: "HA Test Collection"
+        display_name: "HA Test Collection{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -1190,7 +1207,7 @@ def test_gcs_ha_storage_gateway_and_collection(
     - name: Delete HA test storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
-        display_name: "HA Test Gateway"
+        display_name: "HA Test Gateway{SDK_SUFFIX}"
         state: absent
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"

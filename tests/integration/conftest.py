@@ -157,6 +157,30 @@ def run_playbook():
         # Pass through environment variables
         env = os.environ.copy()
 
+        # Set ANSIBLE_COLLECTIONS_PATH to use local module code
+        # For FQCN like m1yag1.globus.globus_gcs, we need to create the proper
+        # collection directory structure
+        project_root = Path(__file__).parent.parent.parent
+
+        # Create a temporary collections path structure with symlinks
+        # Ansible expects: <collections_path>/ansible_collections/<namespace>/<name>
+        collections_temp = Path(tempfile.gettempdir()) / "ansible_test_collections"
+        collection_path = collections_temp / "ansible_collections" / "m1yag1" / "globus"
+
+        # Create directory structure and symlink to project root
+        collection_path.parent.mkdir(parents=True, exist_ok=True)
+        if collection_path.exists() or collection_path.is_symlink():
+            if collection_path.is_symlink():
+                collection_path.unlink()
+            elif collection_path.is_dir():
+                import shutil
+
+                shutil.rmtree(collection_path)
+        collection_path.symlink_to(project_root)
+
+        # Set ANSIBLE_COLLECTIONS_PATH to our temp directory
+        env["ANSIBLE_COLLECTIONS_PATH"] = str(collections_temp)
+
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         return result
 

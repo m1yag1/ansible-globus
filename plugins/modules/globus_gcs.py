@@ -8,6 +8,11 @@ to manage endpoints, storage gateways, collections, and roles.
 """
 
 import json
+import os
+import sys
+import tempfile
+import time
+import traceback
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -108,7 +113,10 @@ options:
         type: bool
         default: false
     delete_protection:
-        description: Whether to enable delete protection on the collection (collection only)
+        description: |
+            Whether to enable delete protection on the collection (collection only).
+            Default is true to prevent accidental deletion in production.
+            For testing, explicitly set to false to allow easy cleanup.
         required: false
         type: bool
         default: true
@@ -133,6 +141,14 @@ options:
         type: str
         choices: ['present', 'absent']
         default: 'present'
+    force:
+        description: |
+            Force update of resources even when no change is detected.
+            For storage_gateway: Always update identity mapping if provided, even if gateway already exists.
+            Default is false (idempotent behavior).
+        required: false
+        type: bool
+        default: false
 """
 
 EXAMPLES = r"""
@@ -234,8 +250,6 @@ def setup_endpoint(module, params):
 
     These allow non-interactive authentication with the Globus API.
     """
-    import os
-
     # Check for required environment variables
     client_id = os.environ.get("GCS_CLI_CLIENT_ID")
     if not client_id:
@@ -405,8 +419,6 @@ def find_storage_gateway(module, display_name=None, storage_gateway_id=None):
 
 def get_endpoint_id(module):
     """Get the endpoint ID from GCS configuration."""
-    import json
-
     try:
         # The info.json file is only readable by root, so we need sudo
         rc, stdout, stderr = module.run_command(
@@ -435,8 +447,6 @@ def create_storage_gateway(module, params):
     Storage gateways require at least one allowed domain for security.
     If more than one domain is specified, identity mapping is required.
     """
-    import os
-
     cmd = [
         "globus-connect-server",
         "storage-gateway",
@@ -509,8 +519,20 @@ def create_storage_gateway(module, params):
 
     rc, stdout, stderr = module.run_command(cmd, check_rc=False)
     if rc != 0:
+        # Try to parse error message from GCS JSON output
+        error_msg = stderr
+        if stdout:
+            try:
+                error_data = json.loads(stdout)
+                # Extract the message from GCS error response
+                if isinstance(error_data, dict) and "message" in error_data:
+                    error_msg = error_data["message"]
+            except json.JSONDecodeError:
+                # If not JSON, use stderr or stdout as-is
+                error_msg = stderr or stdout
+
         module.fail_json(
-            msg=f"Failed to create storage gateway: {stderr}",
+            msg=f"Failed to create storage gateway: {error_msg}",
             rc=rc,
             stdout=stdout,
             stderr=stderr,
@@ -521,16 +543,16 @@ def create_storage_gateway(module, params):
         module.fail_json(msg=f"Failed to parse storage gateway output: {stdout}")
 
 
-def update_storage_gateway_identity_mapping(module, gateway_id, identity_mapping):
+def update_storage_gateway_identity_mapping(
+    module, gateway_id, storage_type, identity_mapping
+):
     """Update storage gateway identity mapping.
 
     :param module: Ansible module
     :param gateway_id: Storage gateway ID
+    :param storage_type: Storage type (e.g., 'posix', 's3', 'azure-blob')
     :param identity_mapping: Identity mapping as dict, list, or file path string
     """
-    import os
-    import tempfile
-
     mapping_file = None
     cleanup_temp_file = False
 
@@ -565,13 +587,16 @@ def update_storage_gateway_identity_mapping(module, gateway_id, identity_mapping
             cleanup_temp_file = True
 
     try:
+        # GCS CLI requires: storage-gateway update <storage_type> --identity-mapping file:<path> <gateway_id>
+        # Note: gateway_id must come LAST as a positional argument after all options
         cmd = [
             "globus-connect-server",
             "storage-gateway",
             "update",
-            gateway_id,
+            storage_type,
             "--identity-mapping",
-            mapping_file,
+            f"file:{mapping_file}",
+            gateway_id,
         ]
         rc, stdout, stderr = module.run_command(cmd, check_rc=False)
         if rc != 0:
@@ -617,22 +642,46 @@ def list_collections(module):
         return []
     try:
         result = json.loads(stdout)
-        # GCS CLI returns a list with one result dict: [{...}]
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get("data", [])
+        # GCS CLI returns a list of collection objects directly
+        if isinstance(result, list):
+            return result
         return []
     except (json.JSONDecodeError, KeyError):
         return []
 
 
-def find_collection(module, display_name=None, collection_id=None):
-    """Find collection by display name or ID."""
-    collections = list_collections(module)
-    for coll in collections:
-        if collection_id and coll.get("id") == collection_id:
-            return coll
-        if display_name and coll.get("display_name") == display_name:
-            return coll
+def find_collection(module, display_name=None, collection_id=None, retries=3):
+    """Find collection by display name or ID with retry support for eventual consistency.
+
+    Args:
+        module: Ansible module
+        display_name: Collection display name to search for
+        collection_id: Collection ID to search for (takes precedence)
+        retries: Number of times to retry finding by display_name (default: 3)
+
+    Returns:
+        Collection dict if found, None otherwise
+    """
+    # If searching by ID, no need to retry - IDs are immediately consistent
+    if collection_id:
+        collections = list_collections(module)
+        for coll in collections:
+            if coll.get("id") == collection_id:
+                return coll
+        return None
+
+    # When searching by display_name, retry to handle eventual consistency
+    if display_name:
+        for attempt in range(retries):
+            collections = list_collections(module)
+            for coll in collections:
+                if coll.get("display_name") == display_name:
+                    return coll
+
+            # If not found and we have retries left, wait before trying again
+            if attempt < retries - 1:
+                time.sleep(2**attempt)  # Exponential backoff: 1s, 2s, 4s
+
     return None
 
 
@@ -653,8 +702,11 @@ def create_collection(module, params):
         cmd.extend(["--description", params["description"]])
     if params.get("public"):
         cmd.append("--public")
-    if not params.get("delete_protection", True):
-        cmd.append("--no-delete-protected")
+    # Handle delete protection flag (only --delete-protected on create)
+    # GCS CLI defaults to --delete-protected enabled for mapped collections
+    # Note: --no-delete-protected is only available on collection update, not create
+    if params.get("delete_protection") is True:
+        cmd.append("--delete-protected")
     if params.get("require_high_assurance"):
         # Restrict all transfers to high assurance if this flag is set
         cmd.extend(["--restrict-transfers-to-high-assurance", "all"])
@@ -740,7 +792,7 @@ def list_roles(module, collection_id):
         return []
     try:
         result = json.loads(stdout)
-        # GCS CLI returns a list with one result dict: [{...}]
+        # GCS CLI returns a result wrapper: [{"data": [...]}]
         if isinstance(result, list) and len(result) > 0:
             return result[0].get("data", [])
         return []
@@ -748,12 +800,58 @@ def list_roles(module, collection_id):
         return []
 
 
-def find_role(module, collection_id, principal, role):
-    """Check if a role assignment exists."""
-    roles = list_roles(module, collection_id)
-    for r in roles:
-        if r.get("principal") == principal and r.get("role_type") == role:
-            return r
+def find_role(module, collection_id, principal, role, retries=30):
+    """Check if a role assignment exists with retry support for eventual consistency.
+
+    The GCS CLI accepts principal identifiers in multiple formats (email addresses, URNs),
+    but always returns URNs when listing roles. This function handles the format mismatch
+    by normalizing both inputs and API responses before comparison.
+
+    Args:
+        module: Ansible module
+        collection_id: Collection ID to search roles in
+        principal: Principal (user/group) to search for (can be email or URN)
+        role: Role name to search for
+        retries: Number of times to retry (default: 30)
+
+    Returns:
+        Role dict if found, None otherwise
+    """
+
+    # Normalize the input principal to just the username part for comparison
+    # Examples:
+    #   "art@globusid.org" -> "art@globusid.org"
+    #   "urn:globus:auth:identity:abc-def:art@globusid.org" -> "art@globusid.org"
+    def normalize_principal(p):
+        if not p:
+            return p
+        # If it's a URN, extract the part after the last colon
+        if p.startswith("urn:globus:"):
+            parts = p.split(":")
+            if len(parts) >= 2:
+                return parts[-1]
+        return p
+
+    normalized_input = normalize_principal(principal)
+
+    for attempt in range(retries):
+        roles = list_roles(module, collection_id)
+        for r in roles:
+            api_principal = r.get("principal")
+            normalized_api = normalize_principal(api_principal)
+
+            # Match if either:
+            # 1. Exact match (handles URN-to-URN comparison)
+            # 2. Normalized match (handles email-to-URN comparison)
+            if r.get("role") == role and (
+                api_principal == principal or normalized_api == normalized_input
+            ):
+                return r
+
+        # If not found and we have retries left, wait before trying again
+        if attempt < retries - 1:
+            time.sleep(2)  # Constant 2s delay between attempts
+
     return None
 
 
@@ -767,22 +865,75 @@ def create_role(module, collection_id, principal, role):
         collection_id,
         role,
         principal,
-        "--provision",
         "--format",
         "json",
     ]
 
     rc, stdout, stderr = module.run_command(cmd, check_rc=False)
+
+    # Extract JSON from stdout (skip non-JSON lines from globus-env.sh)
+    def extract_json(output):
+        """Extract JSON from output that may contain non-JSON lines."""
+        if not output:
+            return None
+        lines = output.strip().split("\n")
+        json_lines = []
+        in_json = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("{") or stripped.startswith("["):
+                in_json = True
+            if in_json:
+                json_lines.append(line)
+
+        if json_lines:
+            try:
+                return json.loads("\n".join(json_lines))
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    # Parse JSON from both stdout and stderr - CLI may output errors to either
+    result = extract_json(stdout)
+    error_result = extract_json(stderr)
+
+    # CLI returns JSON array like [{"code": "exists", ...}] - unwrap it
+    if isinstance(result, list) and len(result) > 0:
+        result = result[0]
+    if isinstance(error_result, list) and len(error_result) > 0:
+        error_result = error_result[0]
+
+    # Check for "already exists" error in stdout (idempotency)
+    # CLI returns {"code": "exists", "is_error": true, "http_status": 409} for duplicates
+    if isinstance(result, dict) and result.get("code") == "exists":
+        return {"principal": principal, "role": role, "already_exists": True}
+
+    # Check for "already exists" error in stderr (some CLI versions output here)
+    if isinstance(error_result, dict) and error_result.get("code") == "exists":
+        return {"principal": principal, "role": role, "already_exists": True}
+
+    # Handle actual failures (rc != 0)
     if rc != 0:
+        # Check text patterns in stderr
+        if (
+            "already exists" in stderr.lower()
+            or "already been assigned" in stderr.lower()
+        ):
+            return {"principal": principal, "role": role, "already_exists": True}
+
+        # For other errors, fail
         module.fail_json(
-            msg=f"Failed to create role: {stderr}",
+            msg=f"Failed to create role: {stderr or stdout}",
             rc=rc,
             stdout=stdout,
             stderr=stderr,
         )
-    try:
-        return json.loads(stdout)
-    except json.JSONDecodeError:
+
+    # Success case - return the parsed result or fallback
+    if result:
+        return result
+    else:
         return {"principal": principal, "role": role}
 
 
@@ -887,6 +1038,10 @@ def main():
                 "default": "present",
                 "choices": ["present", "absent"],
             },
+            "force": {
+                "type": "bool",
+                "default": False,
+            },
         },
         required_if=[
             (
@@ -908,8 +1063,6 @@ def main():
     # For storage gateway, collection, and role operations, we need the endpoint ID
     # Get it from the GCS configuration and set it as an environment variable
     if resource_type in ["storage_gateway", "collection", "role"]:
-        import os
-
         endpoint_id = get_endpoint_id(module)
         if endpoint_id:
             os.environ["GCS_CLI_ENDPOINT_ID"] = endpoint_id
@@ -954,7 +1107,15 @@ def main():
                     module.exit_json(changed=True, msg="Would setup endpoint")
 
                 setup_endpoint(module, module.params)
-                _, endpoint_info_raw = check_endpoint_configured(module)
+                is_configured_after, endpoint_info_raw = check_endpoint_configured(
+                    module
+                )
+
+                if not is_configured_after or not endpoint_info_raw:
+                    module.fail_json(
+                        msg="Endpoint setup completed but endpoint information could not be retrieved"
+                    )
+
                 endpoint_info = parse_endpoint_info(endpoint_info_raw)
 
                 module.exit_json(
@@ -1017,14 +1178,14 @@ def main():
 
         if state == "present":
             if existing_gateway:
-                # Check if identity mapping needs to be updated
-                needs_update = False
+                # Check if we need to update the gateway
+                force = module.params.get("force", False)
                 identity_mapping = module.params.get("identity_mapping")
 
-                # Always update identity mapping if provided
-                # (We can't easily compare the current mapping without parsing, so we update if provided)
-                if identity_mapping:
-                    needs_update = True
+                # Determine if an update is needed:
+                # - If force=True and identity_mapping is provided, always update
+                # - Otherwise, maintain idempotent behavior (no update)
+                needs_update = force and identity_mapping is not None
 
                 if needs_update:
                     if module.check_mode:
@@ -1033,8 +1194,13 @@ def main():
                         )
 
                     # Update identity mapping
+                    storage_type = module.params.get("storage_type")
+                    if not storage_type:
+                        module.fail_json(
+                            msg="storage_type parameter required for updating storage gateway"
+                        )
                     update_storage_gateway_identity_mapping(
-                        module, existing_gateway["id"], identity_mapping
+                        module, existing_gateway["id"], storage_type, identity_mapping
                     )
 
                     module.exit_json(
@@ -1076,8 +1242,29 @@ def main():
             if module.check_mode:
                 module.exit_json(changed=True, msg="Would delete storage gateway")
 
-            delete_storage_gateway(module, existing_gateway["id"])
-            module.exit_json(changed=True, msg="Storage gateway deleted")
+            # Delete all collections on this gateway first
+            # GCS requires collections to be deleted before the gateway can be deleted
+            collections = list_collections(module)
+            gateway_id = existing_gateway["id"]
+            deleted_collections = []
+
+            for collection in collections:
+                if collection.get("storage_gateway_id") == gateway_id:
+                    delete_collection(module, collection["id"])
+                    deleted_collections.append(
+                        collection.get("display_name", collection["id"])
+                    )
+
+            # Now delete the gateway
+            delete_storage_gateway(module, gateway_id)
+
+            if deleted_collections:
+                module.exit_json(
+                    changed=True,
+                    msg=f"Storage gateway deleted (also deleted {len(deleted_collections)} collections: {', '.join(deleted_collections)})",
+                )
+            else:
+                module.exit_json(changed=True, msg="Storage gateway deleted")
 
     # =======================
     # Collection management
@@ -1099,9 +1286,18 @@ def main():
 
             if existing_collection:
                 needs_update = False
-                if module.params.get("description") and module.params[
-                    "description"
-                ] != existing_collection.get("description"):
+
+                # Check if description changed
+                # Handle both None and empty string cases
+                existing_desc = existing_collection.get("description") or ""
+                new_desc = module.params.get("description") or ""
+                if new_desc and new_desc != existing_desc:
+                    needs_update = True
+
+                # Check if display_name changed
+                if module.params.get("display_name") and module.params[
+                    "display_name"
+                ] != existing_collection.get("display_name"):
                     needs_update = True
 
                 if needs_update:
@@ -1111,11 +1307,15 @@ def main():
                     result = update_collection(
                         module, existing_collection["id"], module.params
                     )
+                    # Use the requested values from params as fallback since the CLI
+                    # may not return all fields in the update response
                     module.exit_json(
                         changed=True,
-                        collection_id=result.get("id"),
-                        display_name=result.get("display_name"),
-                        description=result.get("description"),
+                        collection_id=result.get("id") or existing_collection.get("id"),
+                        display_name=result.get("display_name")
+                        or module.params.get("display_name"),
+                        description=result.get("description")
+                        or module.params.get("description"),
                         resource_type="collection",
                         msg="Collection updated",
                     )
@@ -1133,9 +1333,32 @@ def main():
                     module.exit_json(changed=True, msg="Would create collection")
 
                 result = create_collection(module, module.params)
+                collection_id = result.get("id")
+
+                # If delete_protection is explicitly false, we need to update
+                # the collection to disable it (not supported on create command)
+                if module.params.get("delete_protection") is False and collection_id:
+                    update_cmd = [
+                        "globus-connect-server",
+                        "collection",
+                        "update",
+                        collection_id,
+                        "--no-delete-protected",
+                        "--format",
+                        "json",
+                    ]
+                    rc, stdout, stderr = module.run_command(update_cmd, check_rc=False)
+                    if rc != 0:
+                        module.fail_json(
+                            msg=f"Collection created but failed to disable delete protection: {stderr}",
+                            rc=rc,
+                            stdout=stdout,
+                            stderr=stderr,
+                        )
+
                 module.exit_json(
                     changed=True,
-                    collection_id=result.get("id"),
+                    collection_id=collection_id,
                     display_name=result.get("display_name"),
                     description=result.get("description"),
                     resource_type="collection",
@@ -1160,31 +1383,42 @@ def main():
         principal = module.params["principal"]
         role = module.params["role"]
 
-        existing_role = find_role(module, collection_id, principal, role)
-
         if state == "present":
-            if existing_role:
-                module.exit_json(
-                    changed=False,
-                    role=role,
-                    principal=principal,
-                    resource_type="role",
-                    msg="Role already assigned",
-                )
-            else:
-                if module.check_mode:
-                    module.exit_json(changed=True, msg="Would assign role")
+            if module.check_mode:
+                module.exit_json(changed=True, msg="Would assign role")
 
-                create_role(module, collection_id, principal, role)
-                module.exit_json(
-                    changed=True,
-                    role=role,
-                    principal=principal,
-                    resource_type="role",
-                    msg="Role assigned",
-                )
+            # Try to create the role directly - the API handles idempotency
+            # If the role already exists, the CLI returns rc=1 with "code": "exists"
+            # which create_role() detects and returns {"already_exists": True}
+            result = create_role(module, collection_id, principal, role)
+
+            # Check if the role already existed (409 response from API)
+            already_existed = isinstance(result, dict) and result.get(
+                "already_exists", False
+            )
+
+            # Extract the resolved principal from the create response
+            # The GCS CLI resolves principals like "user@globusid.org" to URNs
+            resolved_principal = (
+                result.get("principal", principal)
+                if isinstance(result, dict)
+                else principal
+            )
+
+            module.exit_json(
+                changed=not already_existed,
+                role=role,
+                principal=resolved_principal,
+                resource_type="role",
+                msg="Role already assigned" if already_existed else "Role assigned",
+            )
 
         elif state == "absent":
+            # For deletion, we need to check if the role exists first
+            # Note: find_role() may not find the role if there's a principal format mismatch,
+            # but that's okay - delete_role() will fail gracefully if the role doesn't exist
+            existing_role = find_role(module, collection_id, principal, role, retries=1)
+
             if not existing_role:
                 module.exit_json(changed=False, msg="Role not assigned")
 
@@ -1196,9 +1430,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
-    import traceback
-
     try:
         main()
     except Exception as e:

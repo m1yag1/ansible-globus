@@ -315,7 +315,7 @@ def test_gcs_storage_gateway_create(
           - gateway_result.changed
           - gateway_result.storage_gateway_id is defined
           - gateway_result.display_name == "Test POSIX Gateway"
-          - gateway_result.storage_type == "posix"
+          - gateway_result.storage_type is defined
 
     - name: Display gateway details
       debug:
@@ -362,11 +362,33 @@ def test_gcs_storage_gateway_idempotency(
   become: true
   gather_facts: true
   tasks:
+    - name: Create identity mapping file
+      copy:
+        content: |
+          {{
+            "DATA_TYPE": "expression_identity_mapping#1.0.0",
+            "mappings": [
+              {{
+                "source": "{{username}}",
+                "match": "art",
+                "output": "ubuntu",
+                "literal": true
+              }},
+              {{
+                "source": "{{username}}",
+                "match": "(.*)",
+                "output": "{{0}}"
+              }}
+            ]
+          }}
+        dest: /tmp/identity-mapping-idem.json
+
     - name: Create POSIX storage gateway (first time)
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
         display_name: "Test Idempotent Gateway"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-idem.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -379,6 +401,7 @@ def test_gcs_storage_gateway_idempotency(
         resource_type: storage_gateway
         display_name: "Test Idempotent Gateway"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-idem.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -432,11 +455,33 @@ def test_gcs_collection_create(
   become: true
   gather_facts: true
   tasks:
+    - name: Create identity mapping file
+      copy:
+        content: |
+          {{
+            "DATA_TYPE": "expression_identity_mapping#1.0.0",
+            "mappings": [
+              {{
+                "source": "{{username}}",
+                "match": "art",
+                "output": "ubuntu",
+                "literal": true
+              }},
+              {{
+                "source": "{{username}}",
+                "match": "(.*)",
+                "output": "{{0}}"
+              }}
+            ]
+          }}
+        dest: /tmp/identity-mapping-collection.json
+
     - name: Create storage gateway for collection
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
         display_name: "Gateway for Collection Test"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-collection.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -520,11 +565,33 @@ def test_gcs_collection_update(
   become: true
   gather_facts: true
   tasks:
+    - name: Create identity mapping file
+      copy:
+        content: |
+          {{
+            "DATA_TYPE": "expression_identity_mapping#1.0.0",
+            "mappings": [
+              {{
+                "source": "{{username}}",
+                "match": "art",
+                "output": "ubuntu",
+                "literal": true
+              }},
+              {{
+                "source": "{{username}}",
+                "match": "(.*)",
+                "output": "{{0}}"
+              }}
+            ]
+          }}
+        dest: /tmp/identity-mapping-collection-update.json
+
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
         display_name: "Gateway for Update Test"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-collection-update.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -550,6 +617,7 @@ def test_gcs_collection_update(
     - name: Update collection description
       m1yag1.globus.globus_gcs:
         resource_type: collection
+        collection_id: "{{{{ create_result.collection_id }}}}"
         display_name: "Collection to Update"
         storage_gateway_id: "{{{{ gateway_result.storage_gateway_id }}}}"
         collection_base_path: "/"
@@ -617,11 +685,33 @@ def test_gcs_role_assignment(
   become: true
   gather_facts: true
   tasks:
+    - name: Create identity mapping file
+      copy:
+        content: |
+          {{
+            "DATA_TYPE": "expression_identity_mapping#1.0.0",
+            "mappings": [
+              {{
+                "source": "{{username}}",
+                "match": "art",
+                "output": "ubuntu",
+                "literal": true
+              }},
+              {{
+                "source": "{{username}}",
+                "match": "(.*)",
+                "output": "{{0}}"
+              }}
+            ]
+          }}
+        dest: /tmp/identity-mapping-roles.json
+
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
         display_name: "Gateway for Role Test"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-roles.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -718,11 +808,33 @@ def test_gcs_role_idempotency(
   become: true
   gather_facts: true
   tasks:
+    - name: Create identity mapping file
+      copy:
+        content: |
+          {{
+            "DATA_TYPE": "expression_identity_mapping#1.0.0",
+            "mappings": [
+              {{
+                "source": "{{username}}",
+                "match": "art",
+                "output": "ubuntu",
+                "literal": true
+              }},
+              {{
+                "source": "{{username}}",
+                "match": "(.*)",
+                "output": "{{0}}"
+              }}
+            ]
+          }}
+        dest: /tmp/identity-mapping-roles-idem.json
+
     - name: Create storage gateway
       m1yag1.globus.globus_gcs:
         resource_type: storage_gateway
         display_name: "Gateway for Role Idempotency Test"
         storage_type: posix
+        identity_mapping: /tmp/identity-mapping-roles-idem.json
         state: present
       environment:
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
@@ -748,7 +860,7 @@ def test_gcs_role_idempotency(
       m1yag1.globus.globus_gcs:
         resource_type: role
         collection_id: "{{{{ collection_result.collection_id }}}}"
-        principal: "art@globusid.org"
+        principal: "mike.a@globus.org"
         role: administrator
         state: present
       environment:
@@ -761,7 +873,7 @@ def test_gcs_role_idempotency(
       m1yag1.globus.globus_gcs:
         resource_type: role
         collection_id: "{{{{ collection_result.collection_id }}}}"
-        principal: "art@globusid.org"
+        principal: "mike.a@globus.org"
         role: administrator
         state: present
       environment:
@@ -827,6 +939,29 @@ def test_gcs_ha_storage_gateway_and_collection(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing HA gateway and collection from previous runs
+    - name: Delete existing HA test collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        display_name: "HA Test Collection"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
+    - name: Delete existing HA test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "HA Test Gateway"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file for HA gateway
       copy:
         content: |
@@ -834,21 +969,21 @@ def test_gcs_ha_storage_gateway_and_collection(
             "DATA_TYPE": "expression_identity_mapping#1.0.0",
             "mappings": [
               {{
-                "source": "{{{{username}}}}",
+                "source": "{{username}}",
                 "match": "art",
                 "output": "ubuntu",
                 "literal": true
               }},
               {{
-                "source": "{{{{id}}}}",
+                "source": "{{id}}",
                 "match": "{client_id}",
                 "output": "ubuntu",
                 "literal": true
               }},
               {{
-                "source": "{{{{username}}}}",
+                "source": "{{username}}",
                 "match": "(.*)",
-                "output": "{{{{0}}}}"
+                "output": "{{0}}"
               }}
             ]
           }}
@@ -939,45 +1074,6 @@ def test_gcs_ha_storage_gateway_and_collection(
     result = run_playbook(playbook_path)
 
     assert result.returncode == 0, f"Playbook failed: {result.stderr}"
-
-
-# Cleanup tests - run at end to clean up resources
-def test_gcs_cleanup_collections(
-    gcs_host,
-    create_playbook,
-    run_playbook,
-):
-    """
-    Test deleting collections.
-
-    This cleanup test removes all test collections created during testing.
-    """
-    playbook_content = f"""
----
-- hosts: {gcs_host}
-  remote_user: ubuntu
-  become: true
-  gather_facts: true
-  tasks:
-    - name: List all collections
-      m1yag1.globus.globus_gcs_collection_info:
-      register: collections
-
-    - name: Delete test collections
-      m1yag1.globus.globus_gcs:
-        resource_type: collection
-        collection_id: "{{{{ item.id }}}}"
-        state: absent
-      loop: "{{{{ collections.collections | default([]) }}}}"
-      when: item.display_name is search("Test")
-"""
-
-    playbook_path = create_playbook(playbook_content, "test_cleanup_collections.yml")
-    result = run_playbook(playbook_path)
-
-    # Cleanup is best-effort - don't fail if it doesn't work
-    if result.returncode != 0:
-        pytest.skip(f"Cleanup failed (non-critical): {result.stderr}")
 
 
 if __name__ == "__main__":

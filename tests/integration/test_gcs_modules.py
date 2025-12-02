@@ -346,6 +346,7 @@ def test_gcs_storage_gateway_create(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_storage_gateway.yml")
@@ -375,6 +376,18 @@ def test_gcs_storage_gateway_idempotency(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing gateway from previous runs
+    - name: Delete existing test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "Test Idempotent Gateway"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file
       copy:
         content: |
@@ -439,6 +452,7 @@ def test_gcs_storage_gateway_idempotency(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_gateway_idempotency.yml")
@@ -468,6 +482,29 @@ def test_gcs_collection_create(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing resources from previous runs
+    - name: Delete existing test collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        display_name: "Test Collection"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
+    - name: Delete existing test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "Gateway for Collection Test"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file
       copy:
         content: |
@@ -541,6 +578,7 @@ def test_gcs_collection_create(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
@@ -551,6 +589,7 @@ def test_gcs_collection_create(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_collection.yml")
@@ -578,6 +617,29 @@ def test_gcs_collection_update(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing resources from previous runs
+    - name: Delete existing test collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        display_name: "Collection to Update"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
+    - name: Delete existing test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "Gateway for Update Test"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file
       copy:
         content: |
@@ -659,6 +721,7 @@ def test_gcs_collection_update(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
@@ -669,6 +732,7 @@ def test_gcs_collection_update(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_collection_update.yml")
@@ -698,6 +762,29 @@ def test_gcs_role_assignment(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing resources from previous runs
+    - name: Delete existing test collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        display_name: "Collection for Role Test"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
+    - name: Delete existing test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "Gateway for Role Test"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file
       copy:
         content: |
@@ -781,6 +868,7 @@ def test_gcs_role_assignment(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
@@ -791,6 +879,7 @@ def test_gcs_role_assignment(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_roles.yml")
@@ -821,6 +910,29 @@ def test_gcs_role_idempotency(
   become: true
   gather_facts: true
   tasks:
+    # Cleanup any existing resources from previous runs
+    - name: Delete existing test collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        display_name: "Collection for Role Idempotency"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
+    - name: Delete existing test storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        display_name: "Gateway for Role Idempotency Test"
+        state: absent
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
+        GCS_CLI_CLIENT_ID: "{client_id}"
+        GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
+
     - name: Create identity mapping file
       copy:
         content: |
@@ -911,6 +1023,7 @@ def test_gcs_role_idempotency(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 
     - name: Delete test storage gateway
       m1yag1.globus.globus_gcs:
@@ -921,6 +1034,7 @@ def test_gcs_role_idempotency(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_role_idempotency.yml")
@@ -1071,6 +1185,7 @@ def test_gcs_ha_storage_gateway_and_collection(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 
     - name: Delete HA test storage gateway
       m1yag1.globus.globus_gcs:
@@ -1081,6 +1196,7 @@ def test_gcs_ha_storage_gateway_and_collection(
         GLOBUS_SDK_ENVIRONMENT: "{sdk_env}"
         GCS_CLI_CLIENT_ID: "{client_id}"
         GCS_CLI_CLIENT_SECRET: "{client_secret}"
+      ignore_errors: true
 """
 
     playbook_path = create_playbook(playbook_content, "test_ha_gateway_collection.yml")

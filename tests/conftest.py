@@ -130,20 +130,23 @@ def _get_tokens_from_s3(config):
         # Check if any tokens are expired and refresh them
         from globus_sdk import NativeAppAuthClient
 
-        # Get the native client ID from tokens (stored in metadata if available)
-        # For now, try to get it from environment
-        client_id = os.getenv("GLOBUS_CLIENT_ID")
+        # Get the native client ID from tokens (stored in metadata)
+        # This is the Native App client ID used to create the tokens
+        # (different from GLOBUS_CLIENT_ID which is the confidential app for GCS)
+        client_id = None
+        for _resource_server, token_data in tokens.items():
+            if "client_id" in token_data:
+                client_id = token_data["client_id"]
+                break
+
+        # Fall back to environment variable if not in metadata
         if not client_id:
-            # Try to extract from first token's metadata if available
-            for _resource_server, token_data in tokens.items():
-                if "client_id" in token_data:
-                    client_id = token_data["client_id"]
-                    break
+            client_id = os.getenv("GLOBUS_CLIENT_ID")
 
         if not client_id:
             # Configuration error
             pytest.fail(
-                "GLOBUS_CLIENT_ID not set and not found in token metadata.\n"
+                "No client ID found in token metadata or GLOBUS_CLIENT_ID env var.\n"
                 "This is required for token refresh."
             )
 

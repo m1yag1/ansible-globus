@@ -97,7 +97,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             <html>
             <head><title>Globus Authentication Successful</title></head>
             <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                <h1 style="color: green;">✓ Authentication Successful!</h1>
+                <h1 style="color: green;">Authentication Successful!</h1>
                 <p>Your Globus tokens have been received.</p>
                 <p>You can close this window and return to the terminal.</p>
             </body>
@@ -115,7 +115,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             <html>
             <head><title>Authentication Failed</title></head>
             <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                <h1 style="color: red;">✗ Authentication Failed</h1>
+                <h1 style="color: red;">Authentication Failed</h1>
                 <p>No authorization code received.</p>
                 <p>Please try again.</p>
             </body>
@@ -148,7 +148,7 @@ def perform_oauth_flow(client_id: str, environment: str = None) -> dict:
     redirect_port = 8080
     redirect_uri = f"http://localhost:{redirect_port}"
 
-    print("\n🔐 Starting Globus OAuth Flow")
+    print("\nStarting Globus OAuth Flow")
     print("=" * 60)
     print(f"Client ID: {client_id}")
     print(f"Environment: {environment or 'production'}")
@@ -164,7 +164,7 @@ def perform_oauth_flow(client_id: str, environment: str = None) -> dict:
     )
     authorize_url = client.oauth2_get_authorize_url()
 
-    print("\n📝 Opening browser for authentication...")
+    print("\nOpening browser for authentication...")
     print("If the browser doesn't open automatically, visit:")
     print(f"\n{authorize_url}\n")
 
@@ -172,26 +172,26 @@ def perform_oauth_flow(client_id: str, environment: str = None) -> dict:
     webbrowser.open(authorize_url)
 
     # Start HTTP server to receive callback
-    print("⏳ Waiting for OAuth callback...")
+    print("Waiting for OAuth callback...")
     server = HTTPServer(("localhost", redirect_port), OAuthCallbackHandler)
 
     # Wait for one request (the OAuth callback)
     server.handle_request()
 
     if not auth_code_received:
-        print("\n❌ Error: No authorization code received")
+        print("\nERROR: No authorization code received")
         sys.exit(1)
 
-    print("✓ Authorization code received")
+    print("OK: Authorization code received")
 
     # Exchange code for tokens
-    print("🔄 Exchanging authorization code for tokens...")
+    print("Exchanging authorization code for tokens...")
     token_response = client.oauth2_exchange_code_for_tokens(auth_code_received)
 
-    print("✓ Tokens obtained successfully!")
+    print("OK: Tokens obtained successfully!")
 
     # Display token info
-    print("\n📋 Token Information:")
+    print("\nToken Information:")
     print("=" * 60)
     for resource_server, data in token_response.by_resource_server.items():
         print(f"\n{resource_server}:")
@@ -225,7 +225,7 @@ def store_tokens_in_s3(
         namespace: Token namespace
         client_id: Globus client ID (for token refresh)
     """
-    print("\n☁️  Storing tokens in S3...")
+    print("\nStoring tokens in S3...")
     print("=" * 60)
     print(f"Bucket: {bucket}")
     print(f"Key: {key}")
@@ -247,18 +247,18 @@ def store_tokens_in_s3(
 
     storage.store(token_response)
 
-    print("✓ Tokens stored successfully!")
+    print("OK: Tokens stored successfully!")
 
     # Verify storage
-    print("\n🔍 Verifying stored tokens...")
+    print("\nVerifying stored tokens...")
     for resource_server in token_response.by_resource_server:
         retrieved = storage.get_token_data(resource_server)
         if retrieved:
-            print(f"  ✓ {resource_server}")
+            print(f"  OK: {resource_server}")
         else:
-            print(f"  ✗ {resource_server} (FAILED)")
+            print(f"  FAILED: {resource_server}")
 
-    print("\n✅ Setup complete!")
+    print("\nSetup complete!")
     print("\nNext steps:")
     print("1. Configure GitHub Actions secrets:")
     print(f"   - S3_TOKEN_BUCKET={bucket}")
@@ -324,14 +324,14 @@ def main():
 
     # Validate required arguments
     if not args.client_id:
-        print("❌ Error: --client-id is required")
+        print("ERROR: --client-id is required")
         print("\nGet a Client ID by registering a Native App at:")
         print("https://developers.globus.org")
         print("\nSet redirect URI to: http://localhost:8080")
         sys.exit(1)
 
     if not args.bucket:
-        print("❌ Error: --bucket is required")
+        print("ERROR: --bucket is required")
         sys.exit(1)
 
     # Perform OAuth flow

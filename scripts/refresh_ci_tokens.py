@@ -32,20 +32,20 @@ sys.path.insert(0, str(tests_path))
 try:
     from s3_token_storage import S3TokenStorage
 except ImportError as e:
-    print(f"❌ Failed to import s3_token_storage: {e}")
+    print(f"ERROR: Failed to import s3_token_storage: {e}")
     print("Ensure boto3 is installed: pip install boto3")
     sys.exit(1)
 
 try:
     from globus_sdk import NativeAppAuthClient
 except ImportError:
-    print("❌ globus-sdk not installed: pip install globus-sdk")
+    print("ERROR: globus-sdk not installed: pip install globus-sdk")
     sys.exit(1)
 
 
 def main():
     """Refresh tokens in S3 if they're expired or expiring soon."""
-    print("🔄 Refreshing CI tokens from S3...\n")
+    print("Refreshing CI tokens from S3...\n")
 
     # Get configuration from environment
     bucket = os.getenv("S3_TOKEN_BUCKET")
@@ -56,11 +56,11 @@ def main():
 
     # Validate required vars
     if not bucket:
-        print("❌ S3_TOKEN_BUCKET environment variable not set")
+        print("ERROR: S3_TOKEN_BUCKET environment variable not set")
         sys.exit(1)
 
     if not client_id:
-        print("❌ GLOBUS_CLIENT_ID environment variable not set")
+        print("ERROR: GLOBUS_CLIENT_ID environment variable not set")
         sys.exit(1)
 
     print("Configuration:")
@@ -81,25 +81,47 @@ def main():
             client_id=client_id,
         )
     except Exception as e:
-        print(f"❌ Failed to initialize S3TokenStorage: {e}")
+        print(f"ERROR: Failed to initialize S3TokenStorage: {e}")
         sys.exit(1)
 
     try:
         tokens = storage.get_all_token_data()
     except Exception as e:
-        print(f"❌ Failed to load tokens from S3: {e}")
+        print(f"ERROR: Failed to load tokens from S3: {e}")
         sys.exit(1)
 
     if not tokens:
-        print(f"❌ No tokens found in s3://{bucket}/{key} namespace={namespace}")
+        print(f"ERROR: No tokens found in s3://{bucket}/{key} namespace={namespace}")
         print("\nYou need to store initial tokens with refresh tokens.")
         print("Run: python scripts/setup_oauth_tokens.py")
         sys.exit(1)
 
-    print(f"✓ Found {len(tokens)} token(s) in S3\n")
+    print(f"OK: Found {len(tokens)} token(s) in S3\n")
+
+    # Try to get native app client ID from token metadata first
+    # (this is the client ID used to create the tokens, which is needed for refresh)
+    native_client_id = None
+    for _resource_server, token_data in tokens.items():
+        if "client_id" in token_data:
+            native_client_id = token_data["client_id"]
+            break
+
+    if native_client_id:
+        print(f"OK: Using client ID from token metadata: {native_client_id[:20]}...\n")
+    elif client_id:
+        native_client_id = client_id
+        print(
+            f"WARN: Using client ID from environment (may not work for refresh): {client_id[:20]}...\n"
+        )
+    else:
+        print("ERROR: No client ID found in token metadata or environment")
+        print(
+            "Token refresh requires the Native App client ID used to create the tokens."
+        )
+        sys.exit(1)
 
     # Check each token and refresh if needed
-    auth_client = NativeAppAuthClient(client_id)
+    auth_client = NativeAppAuthClient(native_client_id)
     current_time = time.time()
     refreshed_count = 0
     needs_save = False
@@ -108,22 +130,22 @@ def main():
         expires_at = token_data.get("expires_at_seconds", 0)
         time_until_expiry = expires_at - current_time
 
-        print(f"📍 {resource_server}:")
-        print(f"   Expires in: {time_until_expiry / 3600:.1f} hours")
+        print(f"  {resource_server}:")
+        print(f"    Expires in: {time_until_expiry / 3600:.1f} hours")
 
         # Refresh if expires within next 5 minutes
         if time_until_expiry < 300:
             refresh_token = token_data.get("refresh_token")
 
             if not refresh_token:
-                print("   ❌ EXPIRED with no refresh token!")
-                print("   This token cannot be refreshed automatically.")
-                print("   You must obtain new tokens with refresh tokens included.")
-                print("   Run: python scripts/setup_oauth_tokens.py")
+                print("    ERROR: EXPIRED with no refresh token!")
+                print("    This token cannot be refreshed automatically.")
+                print("    You must obtain new tokens with refresh tokens included.")
+                print("    Run: python scripts/setup_oauth_tokens.py")
                 sys.exit(1)
 
             # Refresh the token
-            print(f"   🔄 Refreshing (expires in {time_until_expiry:.0f}s)...")
+            print(f"    Refreshing (expires in {time_until_expiry:.0f}s)...")
             try:
                 token_response = auth_client.oauth2_refresh_token(refresh_token)
 
@@ -140,36 +162,40 @@ def main():
                         }
                     )
                     new_expiry = refreshed_data["expires_at_seconds"] - current_time
-                    print(f"   ✓ Refreshed! New expiry: {new_expiry / 3600:.1f} hours")
+                    print(
+                        f"    OK: Refreshed! New expiry: {new_expiry / 3600:.1f} hours"
+                    )
                     refreshed_count += 1
                     needs_save = True
                 else:
-                    print(f"   ⚠️  No data for {resource_server} in refresh response")
+                    print(
+                        f"    WARN: No data for {resource_server} in refresh response"
+                    )
 
             except Exception as e:
-                print(f"   ❌ Refresh failed: {e}")
+                print(f"    ERROR: Refresh failed: {e}")
                 sys.exit(1)
         else:
-            print("   ✓ Still valid")
+            print("    OK: Still valid")
 
         print()
 
     # Save refreshed tokens back to S3
     if needs_save:
-        print(f"💾 Saving {refreshed_count} refreshed token(s) back to S3...")
+        print(f"Saving {refreshed_count} refreshed token(s) back to S3...")
         try:
             # Reconstruct the full data structure
             all_data = storage._load_from_s3()  # noqa: SLF001
             all_data[namespace] = tokens
             storage._save_to_s3(all_data)  # noqa: SLF001
-            print("✓ Tokens saved to S3")
+            print("OK: Tokens saved to S3")
         except Exception as e:
-            print(f"❌ Failed to save tokens: {e}")
+            print(f"ERROR: Failed to save tokens: {e}")
             sys.exit(1)
     else:
-        print("✓ No tokens needed refresh")
+        print("OK: No tokens needed refresh")
 
-    print("\n✅ Token refresh complete!")
+    print("\nToken refresh complete!")
     print("Tests can now use fresh tokens from S3.")
 
 

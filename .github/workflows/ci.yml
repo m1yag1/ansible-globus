@@ -93,13 +93,14 @@ jobs:
           fail_ci_if_error: false
 
   integration:
-    name: Integration Tests (SDK ${{ matrix.sdk-version }})
+    name: Integration Tests (SDK ${{ matrix.sdk-version }}, Auth ${{ matrix.auth-method }})
     runs-on: ubuntu-latest
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         sdk-version: ["3", "4"]
+        auth-method: ["oauth", "client_credentials"]
     permissions:
       id-token: write  # Required for AWS OIDC
       contents: read
@@ -141,6 +142,7 @@ jobs:
           ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
       - name: Refresh OAuth tokens
+        if: matrix.auth-method == 'oauth'
         env:
           S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
           S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
@@ -151,6 +153,11 @@ jobs:
         run: |
           uv pip install --system globus-sdk boto3
           python scripts/refresh_ci_tokens.py || echo "::warning::Token refresh failed - some tests may be skipped"
+
+      - name: Install SDK dependencies for client credentials
+        if: matrix.auth-method == 'client_credentials'
+        run: |
+          uv pip install --system globus-sdk boto3
 
       - name: Setup SSH for GCS instance
         env:
@@ -164,7 +171,8 @@ jobs:
 
       - name: Run integration tests with tox
         env:
-          S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
+          # S3_TOKEN_BUCKET only set for oauth auth method (empty string for client_credentials)
+          S3_TOKEN_BUCKET: ${{ matrix.auth-method == 'oauth' && secrets.S3_TOKEN_BUCKET || '' }}
           S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
           S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -175,13 +183,13 @@ jobs:
           TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}
           TEST_GCS_SUBSCRIPTION_ID: ${{ secrets.GLOBUS_SUBSCRIPTION_ID }}
         run: |
-          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance"
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance and not compute"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results-sdk${{ matrix.sdk-version }}
+          name: integration-test-results-sdk${{ matrix.sdk-version }}-${{ matrix.auth-method }}
           path: |
             pytest-report.xml
             htmlcov/

@@ -225,6 +225,7 @@ def _get_tokens_from_client_credentials(config):
             "urn:globus:auth:scope:groups.api.globus.org:all",
             "urn:globus:auth:scope:compute.api.globus.org:all",
             "urn:globus:auth:scope:flows.api.globus.org:all",
+            "https://auth.globus.org/scopes/524230d7-ea86-4a52-8312-86065a9e0417/timer",
         ]
 
         try:

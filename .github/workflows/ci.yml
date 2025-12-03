@@ -182,6 +182,8 @@ jobs:
           GLOBUS_SDK_ENVIRONMENT: test
           TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}
           TEST_GCS_SUBSCRIPTION_ID: ${{ secrets.GLOBUS_SUBSCRIPTION_ID }}
+          # Auth method for unique resource names in parallel tests
+          TEST_AUTH_METHOD: ${{ matrix.auth-method }}
         run: |
           tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance and not compute"
 

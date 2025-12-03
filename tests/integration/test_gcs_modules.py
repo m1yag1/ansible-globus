@@ -51,21 +51,37 @@ import pytest
 pytestmark = pytest.mark.gcs
 
 
-def _get_sdk_suffix():
-    """Get SDK version suffix for unique resource names."""
+def _get_test_suffix():
+    """Get unique suffix for resource names to avoid parallel test collisions.
+
+    Combines SDK version and auth method to create unique resource names
+    when multiple CI jobs run in parallel (e.g., sdk3-oauth, sdk4-creds).
+    """
+    suffix_parts = []
+
+    # Add SDK version
     try:
         import globus_sdk
 
         version = globus_sdk.__version__
         major = version.split(".")[0]
-        return f"-sdk{major}"
+        suffix_parts.append(f"sdk{major}")
     except ImportError:
-        return ""
+        pass
+
+    # Add auth method if set (from CI matrix)
+    auth_method = os.getenv("TEST_AUTH_METHOD", "")
+    if auth_method:
+        # Shorten for cleaner names: oauth, creds
+        short_auth = "oauth" if "oauth" in auth_method else "creds"
+        suffix_parts.append(short_auth)
+
+    return f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
 
 
-# Get SDK suffix at module load time - used in resource names to avoid
-# race conditions when SDK 3 and SDK 4 tests run in parallel
-SDK_SUFFIX = _get_sdk_suffix()
+# Get test suffix at module load time - used in resource names to avoid
+# race conditions when parallel CI jobs run against the same GCS instance
+SDK_SUFFIX = _get_test_suffix()
 
 
 @pytest.fixture(scope="module")

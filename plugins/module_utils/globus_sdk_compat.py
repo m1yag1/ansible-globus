@@ -9,6 +9,7 @@ allowing gradual migration without breaking existing code.
 import typing as t
 
 import globus_sdk
+from globus_sdk import ConfidentialAppAuthClient
 from packaging import version
 
 # Detect SDK version
@@ -17,16 +18,12 @@ IS_V4 = SDK_VERSION.major >= 4
 
 
 def get_auth_client(client_id: str, client_secret: str) -> t.Any:
-    """Get AuthClient compatible with both v3 and v4."""
-    if IS_V4:
-        from globus_sdk import AuthClient, ClientApp
+    """Get ConfidentialAppAuthClient compatible with both v3 and v4.
 
-        app = ClientApp(client_id=client_id, client_secret=client_secret)
-        return AuthClient(app=app)
-    else:
-        from globus_sdk import ConfidentialAppAuthClient
-
-        return ConfidentialAppAuthClient(client_id, client_secret)
+    ConfidentialAppAuthClient is used for client credentials flow in both versions.
+    It has the oauth2_client_credentials_tokens method that AuthClient doesn't have.
+    """
+    return ConfidentialAppAuthClient(client_id, client_secret)
 
 
 def get_transfer_client(

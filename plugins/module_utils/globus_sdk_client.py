@@ -123,14 +123,15 @@ class GlobusSDKClient(GlobusModuleBase):
                 ]
                 self.flows_authorizer = AccessTokenAuthorizer(flows_token)
 
-            # Timers uses the transfer resource server
+            # Timers has its own resource server (UUID-based)
+            timers_resource_server = "524230d7-ea86-4a52-8312-86065a9e0417"
             if (
                 "timers" in self.required_services
-                and "transfer.api.globus.org" in token_response.by_resource_server
+                and timers_resource_server in token_response.by_resource_server
             ):
-                timer_token = token_response.by_resource_server[
-                    "transfer.api.globus.org"
-                ]["access_token"]
+                timer_token = token_response.by_resource_server[timers_resource_server][
+                    "access_token"
+                ]
                 self.timers_authorizer = AccessTokenAuthorizer(timer_token)
 
             # Auth/Projects uses auth resource server

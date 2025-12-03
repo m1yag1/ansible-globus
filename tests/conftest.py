@@ -219,12 +219,17 @@ def _get_tokens_from_client_credentials(config):
     try:
         client = ConfidentialAppAuthClient(config["client_id"], config["client_secret"])
 
-        # Try all scopes first
+        # Request scopes for all services we test
+        # Note: Flows/Timers use resource server UUID-based scope format
+        # Compute is excluded as it uses different scope format in test environment
+        # and compute tests run on GCS hosts with their own auth
         all_scopes = [
             "urn:globus:auth:scope:transfer.api.globus.org:all",
             "urn:globus:auth:scope:groups.api.globus.org:all",
-            "urn:globus:auth:scope:compute.api.globus.org:all",
-            "urn:globus:auth:scope:flows.api.globus.org:all",
+            # Flows scopes (eec9b274-0c81-4334-bdc2-54e90e689b9a is the flows resource server)
+            "https://auth.globus.org/scopes/eec9b274-0c81-4334-bdc2-54e90e689b9a/manage_flows",
+            "https://auth.globus.org/scopes/eec9b274-0c81-4334-bdc2-54e90e689b9a/run",
+            # Timers scope (524230d7-ea86-4a52-8312-86065a9e0417 is the timers resource server)
             "https://auth.globus.org/scopes/524230d7-ea86-4a52-8312-86065a9e0417/timer",
         ]
 
@@ -234,7 +239,7 @@ def _get_tokens_from_client_credentials(config):
             )
         except Exception as e:
             # If client doesn't have all scopes, try with minimal scopes
-            # This handles GCS test clients that only need transfer
+            # This handles clients that only have basic permissions
             if "UNKNOWN_SCOPE_ERROR" in str(e):
                 minimal_scopes = [
                     "urn:globus:auth:scope:transfer.api.globus.org:all",

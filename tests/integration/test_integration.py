@@ -175,6 +175,11 @@ def test_flow_management_with_file(
     run_playbook,
 ):
     """Test Globus flow creation from file."""
+    # Get subscription ID for flow creation (required when user has multiple subscriptions)
+    subscription_id = os.getenv(
+        "TEST_GCS_SUBSCRIPTION_ID", "923ac990-9914-11ed-af9f-c53a64a5b6b4"
+    )
+
     # Create a test flow definition file
     flow_definition = {
         "Comment": "Test flow for Ansible integration",
@@ -210,6 +215,7 @@ def test_flow_management_with_file(
           - "public"
         runnable_by:
           - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
         deploy: true
         {ansible_playbook_auth_params_flows}
         state: present
@@ -300,6 +306,11 @@ def test_flow_timer(
     run_playbook,
 ):
     """Test creating a timer that runs a Globus Flow on a schedule."""
+    # Get subscription ID for flow creation (required when user has multiple subscriptions)
+    subscription_id = os.getenv(
+        "TEST_GCS_SUBSCRIPTION_ID", "923ac990-9914-11ed-af9f-c53a64a5b6b4"
+    )
+
     # Create a test flow definition file
     flow_definition = {
         "Comment": "Test flow triggered by timer",
@@ -336,6 +347,7 @@ def test_flow_timer(
           - "public"
         runnable_by:
           - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
         deploy: true
         {ansible_playbook_auth_params_flows}
         state: present

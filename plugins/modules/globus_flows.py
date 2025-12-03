@@ -59,6 +59,10 @@ options:
         description: ID of existing flow (for updates)
         required: false
         type: str
+    subscription_id:
+        description: Subscription ID for flow creation (required when user has multiple subscriptions)
+        required: false
+        type: str
     state:
         description: Desired state of the flow
         required: false
@@ -208,6 +212,8 @@ def create_flow(api, params):
             create_kwargs["flow_starters"] = params["runnable_by"]
         if params.get("administered_by") is not None:
             create_kwargs["flow_administrators"] = params["administered_by"]
+        if params.get("subscription_id") is not None:
+            create_kwargs["subscription_id"] = params["subscription_id"]
 
         response = api.flows_client.create_flow(**create_kwargs)
         return response.data
@@ -293,6 +299,7 @@ def main():
         administered_by={"type": "list", "elements": "str"},
         input_schema={"type": "dict"},
         flow_id={"type": "str"},
+        subscription_id={"type": "str"},
         deploy={"type": "bool", "default": True},
     )
 

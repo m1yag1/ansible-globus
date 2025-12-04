@@ -72,6 +72,63 @@ ansible-globus/
 └── docs/examples/        # Example playbooks
 ```
 
+## CI/CD Pipeline
+
+This project follows a **Continuous Delivery** approach with a proper test pyramid.
+
+### Pipeline Stages
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DEVELOPMENT (local, seconds)                                   │
+│  ├── Lint: tox -e lint                                          │
+│  └── Unit tests: tox -e py312-sdk4 -- tests/unit/               │
+├─────────────────────────────────────────────────────────────────┤
+│  PRE-PR (local, ~10 min)                                        │
+│  ├── Lint + Type check                                          │
+│  └── Integration tests: tox -e py312-sdk4 -- tests/integration/ │
+├─────────────────────────────────────────────────────────────────┤
+│  PR OPENED (CI, fast feedback)                                  │
+│  ├── Lint + Type check                                          │
+│  ├── Unit tests (SDK3 + SDK4) - parallel                        │
+│  └── Integration tests (single config for speed)                │
+├─────────────────────────────────────────────────────────────────┤
+│  MERGE TO MAIN (CI, comprehensive)                              │
+│  ├── Lint + Type check + Security                               │
+│  ├── Unit tests (SDK3 + SDK4)                                   │
+│  └── Integration tests (all configs) - sequential               │
+├─────────────────────────────────────────────────────────────────┤
+│  RELEASE (CI, gate)                                             │
+│  └── Only proceeds if main is green                             │
+│  └── Build + publish to Galaxy                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Development Workflow
+
+1. **While coding** - Run lint and unit tests frequently:
+   ```bash
+   tox -e lint
+   tox -e py312-sdk4 -- tests/unit/
+   ```
+
+2. **Before opening PR** - Run integration tests locally:
+   ```bash
+   tox -e py312-sdk4 -- tests/integration/ -m "not high_assurance and not compute"
+   ```
+
+3. **Open PR** - CI runs fast checks automatically
+4. **Merge to main** - CI runs comprehensive tests sequentially
+5. **Release** - Only when main is green
+
+### Test Reliability
+
+The pipeline includes several reliability features:
+
+- **Sequential integration tests**: On main, integration tests run one at a time (`max-parallel: 1`) to avoid race conditions on the shared GCS instance
+- **Automatic retries**: Transient failures are retried (`--reruns 2 --reruns-delay 5`)
+- **Test artifacts**: JUnit XML and coverage reports are uploaded for analytics
+
 ## 💻 Development Workflow
 
 ### Quick Development Loop
@@ -80,9 +137,11 @@ ansible-globus/
 # Make changes
 vim plugins/modules/globus_endpoint.py
 
-# Format and test
-uv run tox -e format
-uv run tox -e py312-ansible-latest
+# Format and lint (do this frequently!)
+tox -e lint
+
+# Run unit tests
+tox -e py312-sdk4 -- tests/unit/
 
 # Commit (pre-commit hooks run automatically)
 git add .

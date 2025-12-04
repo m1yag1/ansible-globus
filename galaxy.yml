@@ -1,7 +1,7 @@
 ---
 namespace: m1yag1
 name: globus
-version: 0.2.0
+version: 0.3.0
 readme: README.md
 authors:
   - Ansible Globus Collection Contributors

@@ -5,6 +5,55 @@ All notable changes to the Ansible Globus Collection will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-04
+
+### Added
+
+- **sdk**: Add Globus SDK v3/v4 compatibility layer
+
+### Changed
+
+- **compute**: Update module for SDK v3/v4 support
+- **gcs**: Update module for SDK v3/v4 support
+- **flows**: Rename globus_flow module to globus_flows
+
+### Documentation
+
+- Add CI/CD pipeline workflow documentation
+
+### Fixed
+
+- Add cleanup at start of idempotency test
+- Resolve code quality and security issues
+- **gcs**: Resolve role assignment idempotency and collection update issues
+- **ci**: Add missing secrets and skip static infrastructure tests
+- Use native app client ID from token metadata for refresh
+- Correct module name globus_flow -> globus_flows in tests
+- Fail tests on token/auth errors instead of silently skipping
+- Add subscription_id parameter to globus_flows module
+- Correct scopes and resource servers for flows/timers
+- **sdk-compat**: Use ConfidentialAppAuthClient for SDK v4 auth
+- **tests**: Add auth method to resource names for parallel test isolation
+
+### Security
+
+- **infra**: Add SSH access setup for GitHub Actions GCS integration tests
+
+### Testing
+
+- Add integration test infrastructure for GCS and Compute
+- **gcs**: Add integration tests
+- Update integration tests for SDK v3/v4 compatibility
+- Improve GCS integration test support
+- **gcs**: Add cleanup at start of tests for idempotency
+- **gcs**: Add SDK version suffix to resource names
+
+### Ci
+
+- Add token refresh to keep OAuth tokens fresh
+- Add client_credentials auth method testing matrix
+- Restructure pipeline for continuous delivery workflow
+
 ## [0.2.0] - 2025-11-05
 
 ### Added
@@ -12,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Ansible Galaxy publishing support via tox
 - **changelog**: Add automated changelog generation with git-cliff
 - **release**: Add automated release workflow
+- Add --commit flag to release script for non-interactive mode
 
 ### Changed
 
@@ -44,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct pytest.ini section header for marker registration
 - Support globus-sdk v4 by making StorageAdapter optional
 - Correct safety check output flag syntax
+- Change namespace from community to m1yag1
+- Add meta/runtime.yml and remove invalid doc fragment
+- Add contents write permission for GitHub Release creation
 
 ---
 

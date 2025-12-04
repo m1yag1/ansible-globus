@@ -417,24 +417,45 @@ def find_storage_gateway(module, display_name=None, storage_gateway_id=None):
     return None
 
 
-def get_endpoint_id(module):
-    """Get the endpoint ID from GCS configuration."""
-    try:
-        # The info.json file is only readable by root, so we need sudo
-        rc, stdout, stderr = module.run_command(
-            ["sudo", "cat", "/var/lib/globus-connect-server/info.json"], check_rc=False
-        )
-        if rc == 0 and stdout:
-            info = json.loads(stdout)
-            # Make sure we got a dict, not a list
-            if isinstance(info, dict):
-                return info.get("endpoint_id")
-    except json.JSONDecodeError:
-        # Silently handle invalid JSON - endpoint likely not configured
-        pass
-    except Exception:  # nosec B110
-        # Broad exception catch intentional - any failure means no endpoint ID
-        pass
+def get_endpoint_id(module, max_retries=3, retry_delay=1):
+    """Get the endpoint ID from GCS configuration.
+
+    Includes retry logic to handle transient file read failures that can occur
+    when multiple operations are running in parallel.
+
+    Args:
+        module: Ansible module instance
+        max_retries: Maximum number of attempts (default: 3)
+        retry_delay: Seconds to wait between retries (default: 1)
+
+    Returns:
+        Endpoint ID string or None if not configured
+    """
+    for attempt in range(max_retries):
+        try:
+            # The info.json file is only readable by root, so we need sudo
+            rc, stdout, stderr = module.run_command(
+                ["sudo", "cat", "/var/lib/globus-connect-server/info.json"],
+                check_rc=False,
+            )
+            if rc == 0 and stdout:
+                info = json.loads(stdout)
+                # Make sure we got a dict, not a list
+                if isinstance(info, dict):
+                    endpoint_id = info.get("endpoint_id")
+                    if endpoint_id:
+                        return endpoint_id
+        except json.JSONDecodeError:
+            # Invalid JSON - endpoint likely not configured, no point retrying
+            return None
+        except Exception:  # nosec B110
+            # Transient failure - retry
+            pass
+
+        # Wait before retry (except on last attempt)
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+
     return None
 
 

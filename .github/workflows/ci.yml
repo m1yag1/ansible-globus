@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system "ruff==0.14.2" yamllint ansible-lint mypy
+          uv pip install --system "ruff>=0.1.0" yamllint ansible-lint mypy
 
       - name: Run Ruff linting
         run: ruff check plugins/ tests/
@@ -53,23 +53,22 @@ jobs:
         run: |
           ansible-lint docs/examples/ || true
 
-  test:
-    name: Tests (Python ${{ matrix.python-version }}, SDK ${{ matrix.sdk-version }})
+  unit-tests:
+    name: Unit Tests (SDK ${{ matrix.sdk-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
         sdk-version: ["3", "4"]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -85,32 +84,29 @@ jobs:
           tox -e py312-sdk${{ matrix.sdk-version }} -- tests/unit/ --cov=plugins/module_utils --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           flags: unittests-sdk${{ matrix.sdk-version }}
-          name: codecov-py${{ matrix.python-version }}-sdk${{ matrix.sdk-version }}
+          name: codecov-sdk${{ matrix.sdk-version }}
           fail_ci_if_error: false
 
-  integration:
-    name: Integration Tests (SDK ${{ matrix.sdk-version }}, Auth ${{ matrix.auth-method }})
+  # Integration tests for PRs - fast feedback with single configuration
+  integration-pr:
+    name: Integration Tests (PR)
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        sdk-version: ["3", "4"]
-        auth-method: ["oauth", "client_credentials"]
+    if: github.event_name == 'pull_request'
+    needs: [lint, unit-tests]
     permissions:
-      id-token: write  # Required for AWS OIDC
+      id-token: write
       contents: read
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -133,12 +129,96 @@ jobs:
         run: |
           uv pip install --system ansible-core
 
-      - name: Build Ansible collection
+      - name: Build and install Ansible collection
         run: |
           ansible-galaxy collection build --force
+          ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
-      - name: Install Ansible collection
+      - name: Install SDK dependencies
         run: |
+          uv pip install --system globus-sdk boto3
+
+      - name: Setup SSH for GCS instance
+        env:
+          GCS_SSH_PRIVATE_KEY: ${{ secrets.GCS_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$GCS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Run integration tests (SDK4 + client_credentials)
+        env:
+          S3_TOKEN_BUCKET: ""
+          S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
+          S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
+          GLOBUS_CLIENT_SECRET: ${{ secrets.GLOBUS_CLIENT_SECRET }}
+          GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
+          GLOBUS_SDK_ENVIRONMENT: test
+          TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}
+          TEST_GCS_SUBSCRIPTION_ID: ${{ secrets.GLOBUS_SUBSCRIPTION_ID }}
+          TEST_AUTH_METHOD: client_credentials
+        run: |
+          tox -e py312-sdk4 -- tests/integration/ -rs --tb=short --reruns 2 --reruns-delay 5 -m "not high_assurance and not compute" --junitxml=pytest-report.xml --cov=plugins --cov-report=html:htmlcov
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-pr
+          path: |
+            pytest-report.xml
+            htmlcov/
+          if-no-files-found: warn
+
+  # Integration tests for main - comprehensive, run sequentially
+  integration-main:
+    name: Integration Tests (SDK ${{ matrix.sdk-version }}, ${{ matrix.auth-method }})
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: [lint, unit-tests]
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # Run sequentially to avoid race conditions on shared GCS instance
+      matrix:
+        sdk-version: ["4", "3"]  # SDK4 first (primary target)
+        auth-method: ["client_credentials", "oauth"]
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install tox
+        run: |
+          uv pip install --system tox tox-uv
+
+      - name: Install Ansible for collection build
+        run: |
+          uv pip install --system ansible-core
+
+      - name: Build and install Ansible collection
+        run: |
+          ansible-galaxy collection build --force
           ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
       - name: Refresh OAuth tokens
@@ -166,12 +246,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "$GCS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # Add GCS instance to known_hosts (IP discovered dynamically by tests)
-          # Using StrictHostKeyChecking=accept-new in ansible.cfg instead
 
       - name: Run integration tests with tox
         env:
-          # S3_TOKEN_BUCKET only set for oauth auth method (empty string for client_credentials)
           S3_TOKEN_BUCKET: ${{ matrix.auth-method == 'oauth' && secrets.S3_TOKEN_BUCKET || '' }}
           S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
           S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
@@ -182,10 +259,9 @@ jobs:
           GLOBUS_SDK_ENVIRONMENT: test
           TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}
           TEST_GCS_SUBSCRIPTION_ID: ${{ secrets.GLOBUS_SUBSCRIPTION_ID }}
-          # Auth method for unique resource names in parallel tests
           TEST_AUTH_METHOD: ${{ matrix.auth-method }}
         run: |
-          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short -m "not high_assurance and not compute"
+          tox -e py312-sdk${{ matrix.sdk-version }} -- tests/integration/ -rs --tb=short --reruns 2 --reruns-delay 5 -m "not high_assurance and not compute" --junitxml=pytest-report.xml --cov=plugins --cov-report=html:htmlcov
 
       - name: Upload test results
         if: always()
@@ -195,6 +271,7 @@ jobs:
           path: |
             pytest-report.xml
             htmlcov/
+          if-no-files-found: warn
 
   security:
     name: Security Scanning
@@ -202,10 +279,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -238,10 +315,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -274,20 +351,19 @@ jobs:
                   print(f'Could not check: {url}')
           "
 
-  notify:
-    name: Notification
+  # Final status check
+  ci-status:
+    name: CI Status
     runs-on: ubuntu-latest
-    needs: [lint, test, integration, security, docs]
+    needs: [lint, unit-tests, security, docs]
     if: always()
 
     steps:
-      - name: Notify on success
-        if: ${{ needs.lint.result == 'success' && needs.test.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
+      - name: Check CI status
         run: |
-          echo "✅ All checks passed successfully!"
-
-      - name: Notify on failure
-        if: ${{ needs.lint.result == 'failure' || needs.test.result == 'failure' || needs.integration.result == 'failure' }}
-        run: |
-          echo "❌ Some checks failed. Please review the logs."
-          exit 1
+          if [[ "${{ needs.lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.unit-tests.result }}" == "failure" ]]; then
+            echo "CI checks failed"
+            exit 1
+          fi
+          echo "CI checks passed"

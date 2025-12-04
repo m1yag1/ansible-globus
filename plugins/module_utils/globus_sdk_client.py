@@ -10,6 +10,7 @@ from globus_sdk import (
     AccessTokenAuthorizer,
     FlowsClient,
     GroupsClient,
+    SearchClient,
     TransferClient,
 )
 
@@ -34,6 +35,7 @@ class GlobusSDKClient(GlobusModuleBase):
         "flows": CompatScopes.flows_all(),
         "timers": CompatScopes.timers_all(),
         "auth": CompatScopes.auth_manage_projects(),
+        "search": CompatScopes.search_all(),
     }
 
     def __init__(
@@ -59,6 +61,7 @@ class GlobusSDKClient(GlobusModuleBase):
         self._compute_client: ComputeClient | None = None
         self._flows_client: FlowsClient | None = None
         self._timers_client: t.Any = None
+        self._search_client: SearchClient | None = None
 
         self._authenticate()
 
@@ -144,6 +147,16 @@ class GlobusSDKClient(GlobusModuleBase):
                 ]
                 self.auth_authorizer = AccessTokenAuthorizer(auth_token)
 
+            # Search uses search.api.globus.org resource server
+            if (
+                "search" in self.required_services
+                and "search.api.globus.org" in token_response.by_resource_server
+            ):
+                search_token = token_response.by_resource_server[
+                    "search.api.globus.org"
+                ]["access_token"]
+                self.search_authorizer = AccessTokenAuthorizer(search_token)
+
         elif self.auth_method == "access_token":
             if not self.access_token:
                 self.fail_json("access_token required for access_token auth")
@@ -156,6 +169,7 @@ class GlobusSDKClient(GlobusModuleBase):
             self.flows_authorizer = authorizer
             self.timers_authorizer = authorizer
             self.auth_authorizer = authorizer
+            self.search_authorizer = authorizer
 
         else:
             self.fail_json(f"Unsupported auth method: {self.auth_method}")
@@ -210,6 +224,13 @@ class GlobusSDKClient(GlobusModuleBase):
             ):
                 self._auth_client = AuthClient(authorizer=self.auth_authorizer)
         return self._auth_client
+
+    @property
+    def search_client(self) -> SearchClient | None:
+        """Get Search API client."""
+        if self._search_client is None and hasattr(self, "search_authorizer"):
+            self._search_client = SearchClient(authorizer=self.search_authorizer)
+        return self._search_client
 
     def handle_api_error(self, error: Exception, operation: str = "API call") -> None:
         """Handle Globus API errors consistently."""

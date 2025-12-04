@@ -62,14 +62,6 @@ EXAMPLES = r"""
     client_id: "{{ globus_client_id }}"
     client_secret: "{{ globus_client_secret }}"
     state: absent
-
-- name: Create index with access token
-  m1yag1.globus.globus_search:
-    name: "my-search-index"
-    description: "My search index"
-    auth_method: access_token
-    access_token: "{{ globus_access_token }}"
-    state: present
 """
 
 RETURN = r"""

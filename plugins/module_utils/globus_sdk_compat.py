@@ -236,6 +236,11 @@ class CompatScopes:
             # v3 doesn't have standardized compute scopes
             return "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all"
 
+    @staticmethod
+    def search_all() -> str:
+        """Get search:all scope as string."""
+        return scope_to_string(globus_sdk.SearchClient.scopes.all)
+
 
 # Export version information
 __all__ = [

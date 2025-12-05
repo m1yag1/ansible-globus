@@ -231,6 +231,8 @@ def _get_tokens_from_client_credentials(config):
             "https://auth.globus.org/scopes/eec9b274-0c81-4334-bdc2-54e90e689b9a/run",
             # Timers scope (524230d7-ea86-4a52-8312-86065a9e0417 is the timers resource server)
             "https://auth.globus.org/scopes/524230d7-ea86-4a52-8312-86065a9e0417/timer",
+            # Search scope
+            "urn:globus:auth:scope:search.api.globus.org:all",
         ]
 
         try:
@@ -315,6 +317,7 @@ def _get_auth_params_for_service(globus_auth_config, globus_tokens, service):
         "compute": "funcx_service",
         "timers": "524230d7-ea86-4a52-8312-86065a9e0417",  # Timers have their own resource server
         "auth": "auth.globus.org",  # Auth/Projects use auth resource server
+        "search": "search.api.globus.org",  # Search index management
     }
 
     if auth_method == "s3_tokens" or auth_method == "cli":
@@ -381,3 +384,9 @@ def ansible_playbook_auth_params_timers(globus_auth_config, globus_tokens):
 def ansible_playbook_auth_params_auth(globus_auth_config, globus_tokens):
     """Generate Ansible playbook authentication parameters for auth service (projects/policies)."""
     return _get_auth_params_for_service(globus_auth_config, globus_tokens, "auth")
+
+
+@pytest.fixture
+def ansible_playbook_auth_params_search(globus_auth_config, globus_tokens):
+    """Generate Ansible playbook authentication parameters for search service."""
+    return _get_auth_params_for_service(globus_auth_config, globus_tokens, "search")

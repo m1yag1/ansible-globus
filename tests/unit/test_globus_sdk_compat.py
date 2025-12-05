@@ -47,10 +47,12 @@ def test_compat_scopes():
     assert isinstance(CompatScopes.flows_all(), str)
     assert isinstance(CompatScopes.timers_all(), str)
     assert isinstance(CompatScopes.auth_manage_projects(), str)
+    assert isinstance(CompatScopes.search_all(), str)
 
     # Should be valid URN format
     assert CompatScopes.transfer_all().startswith("urn:globus:auth:scope:")
     assert CompatScopes.groups_all().startswith("urn:globus:auth:scope:")
+    assert CompatScopes.search_all().startswith("urn:globus:auth:scope:")
 
 
 def test_globus_auth_module_import():
@@ -103,6 +105,7 @@ def test_sdk_client_has_compat_scopes():
     assert "flows" in scopes
     assert "timers" in scopes
     assert "auth" in scopes
+    assert "search" in scopes
 
     # All should be strings (from CompatScopes)
     for scope in scopes.values():

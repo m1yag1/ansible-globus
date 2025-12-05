@@ -2,6 +2,9 @@
 Integration test fixtures for ansible-globus.
 
 Provides fixtures for running Ansible playbooks in integration tests.
+
+Note: Coverage is disabled for integration tests because modules execute
+in separate Ansible subprocesses where pytest-cov cannot track them.
 """
 
 import json
@@ -203,3 +206,12 @@ def run_playbook():
         return result
 
     return _run_playbook
+
+
+def pytest_configure(config):
+    """Disable coverage for integration tests."""
+    # Coverage is meaningless for integration tests since modules run
+    # in separate Ansible subprocesses
+    cov = config.pluginmanager.get_plugin("_cov")
+    if cov:
+        cov.options.no_cov = True

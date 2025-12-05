@@ -80,6 +80,7 @@ changed:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from globus_sdk import AuthClient, BatchMembershipActions
 
 from ansible_collections.m1yag1.globus.plugins.module_utils.globus_common import (
     globus_argument_spec,
@@ -157,28 +158,53 @@ def update_group(api, group_id, params, existing_group=None):
 
 
 def manage_members(api, group_id, members, role="member"):
-    """Manage group members or admins."""
+    """Manage group members or admins using SDK.
+
+    Args:
+        api: GlobusSDKClient instance
+        group_id: The group ID to manage
+        members: List of usernames to add (e.g., ["user@globusid.org"])
+        role: Role for the members ("member" or "admin")
+
+    Returns:
+        bool: True if members were added, False otherwise
+    """
     if not members:
         return False
 
-    changed = False
-    current_members = api.get(f"groups/{group_id}/members")
-    current_member_ids = {m["identity_id"] for m in current_members.get("data", [])}
+    try:
+        # Get current group membership
+        group_with_members = api.groups_client.get_group(
+            group_id, include="memberships"
+        )
+        memberships = group_with_members.data.get("memberships", [])
+        current_member_ids = {m["identity_id"] for m in memberships}
 
-    # Add new members
-    for member in members:
-        # Resolve identity
-        identity = api.get("identities", params={"usernames": member})
-        if identity.get("data"):
-            identity_id = identity["data"][0]["id"]
+        # Resolve usernames to identity IDs using AuthClient
+        # Use the groups authorizer for identity lookups (any valid token works)
+        auth_client = AuthClient(authorizer=api.groups_authorizer)
+        identity_response = auth_client.get_identities(usernames=members)
+        identities = identity_response.data.get("identities", [])
+
+        # Find identities that need to be added
+        new_identity_ids = []
+        for identity in identities:
+            identity_id = identity["id"]
             if identity_id not in current_member_ids:
-                api.post(
-                    f"groups/{group_id}/members",
-                    {"identity_id": identity_id, "role": role},
-                )
-                changed = True
+                new_identity_ids.append(identity_id)
 
-    return changed
+        if not new_identity_ids:
+            return False
+
+        # Use BatchMembershipActions to add members
+        batch = BatchMembershipActions()
+        batch.add_members(new_identity_ids, role=role)
+
+        api.groups_client.batch_membership_action(group_id, batch)
+        return True
+
+    except Exception as e:
+        api.handle_api_error(e, f"managing members for group {group_id}")
 
 
 def delete_group(api, group_id):

@@ -157,10 +157,11 @@ def update_group(api, group_id, params, existing_group=None):
         api.handle_api_error(e, f"updating group {group_id}")
 
 
-def manage_members(api, group_id, members, role="member"):
+def manage_members(module, api, group_id, members, role="member"):
     """Manage group members or admins using SDK.
 
     Args:
+        module: AnsibleModule instance for warnings
         api: GlobusSDKClient instance
         group_id: The group ID to manage
         members: List of usernames to add (e.g., ["user@globusid.org"])
@@ -185,6 +186,17 @@ def manage_members(api, group_id, members, role="member"):
         auth_client = AuthClient(authorizer=api.groups_authorizer)
         identity_response = auth_client.get_identities(usernames=members)
         identities = identity_response.data.get("identities", [])
+
+        # Build a map of resolved usernames
+        resolved_usernames = {i.get("username") for i in identities}
+
+        # Warn about unresolvable usernames
+        for member in members:
+            if member not in resolved_usernames:
+                module.warn(
+                    f"Could not resolve identity for '{member}' - "
+                    f"user may not exist or username may be incorrect"
+                )
 
         # Find identities that need to be added
         new_identity_ids = []
@@ -252,12 +264,14 @@ def main():
                 changed = True
 
             # Manage members
-            if manage_members(api, existing_group["id"], module.params.get("members")):
+            if manage_members(
+                module, api, existing_group["id"], module.params.get("members")
+            ):
                 changed = True
 
             # Manage admins
             if manage_members(
-                api, existing_group["id"], module.params.get("admins"), "admin"
+                module, api, existing_group["id"], module.params.get("admins"), "admin"
             ):
                 changed = True
 
@@ -271,8 +285,8 @@ def main():
             group_id = group["id"]
 
             # Add members
-            manage_members(api, group_id, module.params.get("members"))
-            manage_members(api, group_id, module.params.get("admins"), "admin")
+            manage_members(module, api, group_id, module.params.get("members"))
+            manage_members(module, api, group_id, module.params.get("admins"), "admin")
 
             module.exit_json(changed=True, group_id=group_id, name=name)
 

@@ -1,0 +1,79 @@
+---
+# Example: Managing Globus Search Indexes
+#
+# This playbook demonstrates search index management operations:
+#   1. Creating a search index
+#   2. Verifying idempotency (re-running shows no changes)
+#   3. Deleting an index
+#
+# Note: Search indexes do NOT support metadata updates after creation.
+# To change description, you must delete and recreate the index.
+#
+# Trial Index Limits:
+#   - Free tier: 3 trial indexes max
+#   - Trial indexes: 1 MB storage, 30-day auto-deletion
+#   - Contact support@globus.org for subscription upgrades
+#
+# Prerequisites:
+#   - Set GLOBUS_CLIENT_ID and GLOBUS_CLIENT_SECRET environment variables
+#
+# Run with:
+#   ansible-playbook examples/globus_search.yml
+
+- name: Manage Globus Search Indexes
+  hosts: localhost
+  gather_facts: false
+
+  module_defaults:
+    group/m1yag1.globus.all:
+      auth_method: client_credentials
+      client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+      client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+
+  tasks:
+    # =========================================================================
+    # Create a search index
+    # =========================================================================
+    # New indexes are created as trial indexes by default.
+    # Trial indexes are limited to 1 MB and auto-delete after 30 days.
+
+    - name: Create research publications index
+      m1yag1.globus.globus_search:
+        name: "research-publications"
+        description: "Index for research publication metadata"
+        state: present
+      register: index_result
+
+    - name: Show index details
+      ansible.builtin.debug:
+        msg: >-
+          Index '{{ index_result.name }}' created with ID: {{ index_result.index_id }}
+          (trial: {{ index_result.is_trial }}, count: {{ index_result.trial_count | default('n/a') }})
+
+    # =========================================================================
+    # Idempotency - running again shows no changes
+    # =========================================================================
+    # The module is idempotent - running with the same parameters
+    # will report changed: false if the index already exists.
+
+    - name: Re-run create (demonstrates idempotency)
+      m1yag1.globus.globus_search:
+        name: "research-publications"
+        description: "Index for research publication metadata"
+        state: present
+      register: idempotent_result
+
+    - name: Verify no changes on re-run
+      ansible.builtin.debug:
+        msg: "Idempotent run changed: {{ idempotent_result.changed }}"
+
+    # =========================================================================
+    # Delete an index
+    # =========================================================================
+    # Deletion is async - index goes to delete-pending before removal.
+    # Deleting a non-existent index is idempotent (changed: false).
+
+    - name: Delete the index
+      m1yag1.globus.globus_search:
+        name: "research-publications"
+        state: absent

@@ -1,0 +1,88 @@
+---
+# Example: Managing Globus Groups
+#
+# This playbook demonstrates common group management operations:
+#   1. Creating a group with admins and members
+#   2. Updating membership (adding/removing users)
+#   3. Deleting a group
+#
+# Prerequisites:
+#   - Set GLOBUS_CLIENT_ID and GLOBUS_CLIENT_SECRET environment variables
+#
+# Run with:
+#   ansible-playbook examples/globus_group.yml
+
+- name: Manage Globus Groups
+  hosts: localhost
+  gather_facts: false
+
+  # Use module_defaults to avoid repeating auth config on every task
+  module_defaults:
+    group/m1yag1.globus.all:
+      auth_method: client_credentials
+      client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+      client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+
+  tasks:
+    # =========================================================================
+    # Create a group with admins and members
+    # =========================================================================
+    # This creates a new group or updates an existing one with the same name.
+    # Membership is declarative - the lists you specify will be the exact
+    # membership (users not in the list will be removed).
+
+    - name: Create research team group
+      m1yag1.globus.globus_group:
+        name: "research-team-alpha"
+        description: "Research Team Alpha - Climate Science"
+        admins:
+          - "admin@university.edu"
+        members:
+          - "researcher1@university.edu"
+          - "researcher2@university.edu"
+          - "researcher3@university.edu"
+        state: present
+      register: group_result
+
+    - name: Show group details
+      ansible.builtin.debug:
+        msg: "Group '{{ group_result.name }}' created with ID: {{ group_result.group_id }}"
+
+    # =========================================================================
+    # Update membership - remove a member
+    # =========================================================================
+    # To remove a member, simply run again with the updated list.
+    # This removes researcher3 from the group.
+
+    - name: Update group membership (remove researcher3)
+      m1yag1.globus.globus_group:
+        name: "research-team-alpha"
+        description: "Research Team Alpha - Climate Science"
+        admins:
+          - "admin@university.edu"
+        members:
+          - "researcher1@university.edu"
+          - "researcher2@university.edu"
+        state: present
+
+    # =========================================================================
+    # Clear all members
+    # =========================================================================
+    # To remove all members, set an empty list.
+    # Note: Omitting the key entirely means "don't manage membership".
+
+    - name: Remove all regular members (keep admins)
+      m1yag1.globus.globus_group:
+        name: "research-team-alpha"
+        members: []
+        state: present
+
+    # =========================================================================
+    # Delete a group
+    # =========================================================================
+    # Set state: absent to delete the group entirely.
+
+    - name: Delete the group
+      m1yag1.globus.globus_group:
+        name: "research-team-alpha"
+        state: absent

@@ -158,20 +158,25 @@ def update_group(api, group_id, params, existing_group=None):
 
 
 def manage_members(module, api, group_id, members, role="member"):
-    """Manage group members or admins using SDK.
+    """Manage group members or admins using SDK (declarative).
 
-    Args:
-        module: AnsibleModule instance for warnings
-        api: GlobusSDKClient instance
-        group_id: The group ID to manage
-        members: List of usernames to add (e.g., ["user@globusid.org"])
-        role: Role for the members ("member" or "admin")
+    Ensures the group membership matches the specified list exactly.
+    Members not in the list will be removed, and members in the list
+    will be added.
 
-    Returns:
-        bool: True if members were added, False otherwise
+    :param module: AnsibleModule instance for errors
+    :param api: GlobusSDKClient instance
+    :param group_id: The group ID to manage
+    :param members: List of usernames. If None, no changes are made.
+    :param role: Role for the members ("member" or "admin")
+    :return: True if membership was changed, False otherwise
     """
-    if not members:
+    if members is None:
         return False
+
+    # Get the current service client ID to exclude from removal
+    # (the service client that created/manages the group can't be removed)
+    current_client_id = module.params.get("client_id")
 
     try:
         # Get current group membership
@@ -179,10 +184,24 @@ def manage_members(module, api, group_id, members, role="member"):
             group_id, include="memberships"
         )
         memberships = group_with_members.data.get("memberships", [])
-        current_member_ids = {m["identity_id"] for m in memberships}
+
+        # Filter current members by role, excluding the current service client
+        current_members_with_role = {
+            m["identity_id"]
+            for m in memberships
+            if m.get("role") == role and m.get("identity_id") != current_client_id
+        }
+
+        # Handle empty members list - remove all members with this role
+        if not members:
+            if not current_members_with_role:
+                return False
+            batch = BatchMembershipActions()
+            batch.remove_members(list(current_members_with_role))
+            api.groups_client.batch_membership_action(group_id, batch)
+            return True
 
         # Resolve usernames to identity IDs using AuthClient
-        # Use the groups authorizer for identity lookups (any valid token works)
         auth_client = AuthClient(authorizer=api.groups_authorizer)
         identity_response = auth_client.get_identities(usernames=members)
         identities = identity_response.data.get("identities", [])
@@ -190,27 +209,30 @@ def manage_members(module, api, group_id, members, role="member"):
         # Build a map of resolved usernames
         resolved_usernames = {i.get("username") for i in identities}
 
-        # Warn about unresolvable usernames
-        for member in members:
-            if member not in resolved_usernames:
-                module.warn(
-                    f"Could not resolve identity for '{member}' - "
-                    f"user may not exist or username may be incorrect"
-                )
+        # Fail if any usernames couldn't be resolved
+        unresolved = [m for m in members if m not in resolved_usernames]
+        if unresolved:
+            module.fail_json(
+                msg=f"Could not resolve identities for: {', '.join(unresolved)}. "
+                f"Users may not exist or usernames may be incorrect."
+            )
 
-        # Find identities that need to be added
-        new_identity_ids = []
-        for identity in identities:
-            identity_id = identity["id"]
-            if identity_id not in current_member_ids:
-                new_identity_ids.append(identity_id)
+        # Build set of desired identity IDs
+        desired_identity_ids = {i["id"] for i in identities}
 
-        if not new_identity_ids:
+        # Find members to add and remove
+        to_add = desired_identity_ids - current_members_with_role
+        to_remove = current_members_with_role - desired_identity_ids
+
+        if not to_add and not to_remove:
             return False
 
-        # Use BatchMembershipActions to add members
+        # Use BatchMembershipActions to add/remove members
         batch = BatchMembershipActions()
-        batch.add_members(new_identity_ids, role=role)
+        if to_add:
+            batch.add_members(list(to_add), role=role)
+        if to_remove:
+            batch.remove_members(list(to_remove))
 
         api.groups_client.batch_membership_action(group_id, batch)
         return True

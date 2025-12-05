@@ -1,2 +1,14 @@
 ---
 requires_ansible: '>=2.16.0'
+
+action_groups:
+  all:
+    - globus_auth
+    - globus_collection
+    - globus_compute
+    - globus_endpoint
+    - globus_flows
+    - globus_gcs
+    - globus_group
+    - globus_search
+    - globus_timer

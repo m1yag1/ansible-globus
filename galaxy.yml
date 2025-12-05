@@ -34,24 +34,74 @@ issues: https://github.com/m1yag1/ansible-globus/issues
 
 # Build ignore patterns
 build_ignore:
+  # Compiled/cache files
   - "*.pyc"
   - "*.retry"
+  - "__pycache__"
+  - "*.egg-info"
+  - "*.log"
+  - ".ruff_cache"
+
+  # Version control
   - ".git"
   - ".gitignore"
-  - ".tox"
-  - "__pycache__"
-  - ".pytest_cache"
-  - "*.egg-info"
+  - ".gitattributes"
+  - ".github"
+
+  # Virtual environments
   - ".venv"
   - "venv"
-  - ".DS_Store"
-  - "Thumbs.db"
+  - ".tox"
+
+  # Testing
+  - "tests"
+  - ".pytest_cache"
   - ".coverage"
   - "htmlcov"
-  - "*.log"
-  - ".ansible"
-  - "uv.lock"
+  - "coverage_html"
+  - "coverage.xml"
+  - "pytest.ini"
+  - "conftest.py"
+  - "tox.ini"
   - "bandit-report.json"
+
+  # Test state files
+  - ".auth_policy_id"
+  - ".compute_endpoint_id"
+  - ".compute_flow_id"
+  - ".compute_function_id"
+
+  # Development tooling
+  - ".pre-commit-config.yaml"
+  - ".yamllint.yml"
+  - ".ansible-lint"
+  - "ansible.cfg"
+  - "pyproject.toml"
+  - "uv.lock"
+  - "Makefile"
+
+  # Infrastructure/CI
+  - "infra"
+  - "scripts"
+  - ".flows"
+
+  # Documentation (internal)
+  - "_docs"
+  - "docs"
+  - "TESTING_GUIDE.md"
+  - "RELEASING.md"
+  - "CONTRIBUTING.md"
+  - "examples/INTEGRATION_TESTING.md"
+
+  # Build artifacts
   - "build"
   - "dist"
-  - "TESTING_GUIDE.md"  # Internal development file
+  - "_build"
+
+  # OS files
+  - ".DS_Store"
+  - "Thumbs.db"
+  - ".ansible"
+
+  # Changelog tooling
+  - "cliff.toml"

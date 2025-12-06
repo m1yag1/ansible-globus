@@ -246,6 +246,109 @@ class GlobusSDKClient(GlobusModuleBase):
         else:
             self.fail_json(f"Unexpected error during {operation}: {error}")
 
+    # Special principal values that should be passed through without resolution
+    SPECIAL_PRINCIPALS = {"public", "all_authenticated_users"}
+
+    def resolve_principals(
+        self,
+        principals: list[str],
+        authorizer: t.Any = None,
+        output_format: str = "urn",
+    ) -> list[str]:
+        """Resolve a list of principals to the requested format.
+
+        Principals can be:
+
+        - Special values: "public", "all_authenticated_users" (passed through as-is)
+        - URNs: "urn:globus:auth:identity:..." or "urn:globus:groups:id:..." (passed through)
+        - UUIDs: passed through (for identity IDs)
+        - Usernames/emails: resolved to identity URN or ID via AuthClient
+
+        :param principals: List of principal identifiers.
+        :param authorizer: Optional authorizer for AuthClient (defaults to groups_authorizer).
+        :param output_format: "urn" for URN format, "id" for just the UUID.
+        :returns: List of resolved principals in the requested format.
+        """
+        from globus_sdk import AuthClient
+
+        if not principals:
+            return []
+
+        result = []
+        usernames_to_resolve = []
+
+        for principal in principals:
+            # Special values - pass through
+            if principal in self.SPECIAL_PRINCIPALS:
+                result.append(principal)
+            # Already a URN - pass through
+            elif principal.startswith("urn:"):
+                if output_format == "id" and "urn:globus:auth:identity:" in principal:
+                    # Extract ID from URN
+                    result.append(principal.split(":")[-1])
+                else:
+                    result.append(principal)
+            # Looks like a UUID - pass through (or convert to URN)
+            elif self._is_uuid(principal):
+                if output_format == "urn":
+                    result.append(f"urn:globus:auth:identity:{principal}")
+                else:
+                    result.append(principal)
+            # Username/email - needs resolution
+            else:
+                usernames_to_resolve.append(principal)
+
+        # Resolve usernames if any
+        if usernames_to_resolve:
+            auth_authorizer = authorizer or getattr(self, "groups_authorizer", None)
+            if not auth_authorizer:
+                self.fail_json(
+                    msg="Cannot resolve usernames: no authorizer available. "
+                    "Use URNs or UUIDs instead."
+                )
+
+            auth_client = AuthClient(authorizer=auth_authorizer)
+            try:
+                response = auth_client.get_identities(usernames=usernames_to_resolve)
+                identities = response.data.get("identities", [])
+
+                # Build map of username -> identity
+                identity_map = {i.get("username"): i for i in identities}
+
+                # Check for unresolved usernames
+                resolved_usernames = set(identity_map.keys())
+                unresolved = [
+                    u for u in usernames_to_resolve if u not in resolved_usernames
+                ]
+                if unresolved:
+                    self.fail_json(
+                        msg=f"Could not resolve identities for: {', '.join(unresolved)}. "
+                        "Users may not exist or usernames may be incorrect."
+                    )
+
+                # Add resolved identities
+                for username in usernames_to_resolve:
+                    identity = identity_map[username]
+                    if output_format == "urn":
+                        result.append(f"urn:globus:auth:identity:{identity['id']}")
+                    else:
+                        result.append(identity["id"])
+
+            except Exception as e:
+                self.handle_api_error(e, "resolving usernames to identities")
+
+        return result
+
+    def _is_uuid(self, value: str) -> bool:
+        """Check if a string looks like a UUID."""
+        import re
+
+        uuid_pattern = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
+        )
+        return bool(uuid_pattern.match(value))
+
     def get(
         self, endpoint: str, params: dict[str, t.Any] | None = None
     ) -> dict[str, t.Any]:

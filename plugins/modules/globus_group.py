@@ -26,12 +26,16 @@ options:
         choices: ['public', 'private']
         default: 'private'
     members:
-        description: List of group members
+        description:
+            - List of group members.
+            - Accepts usernames (e.g., user@globusid.org), identity URNs, or UUIDs.
         required: false
         type: list
         elements: str
     admins:
-        description: List of group administrators
+        description:
+            - List of group administrators.
+            - Accepts usernames (e.g., user@globusid.org), identity URNs, or UUIDs.
         required: false
         type: list
         elements: str
@@ -80,7 +84,7 @@ changed:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from globus_sdk import AuthClient, BatchMembershipActions
+from globus_sdk import BatchMembershipActions
 
 from ansible_collections.m1yag1.globus.plugins.module_utils.globus_common import (
     globus_argument_spec,
@@ -201,24 +205,10 @@ def manage_members(module, api, group_id, members, role="member"):
             api.groups_client.batch_membership_action(group_id, batch)
             return True
 
-        # Resolve usernames to identity IDs using AuthClient
-        auth_client = AuthClient(authorizer=api.groups_authorizer)
-        identity_response = auth_client.get_identities(usernames=members)
-        identities = identity_response.data.get("identities", [])
-
-        # Build a map of resolved usernames
-        resolved_usernames = {i.get("username") for i in identities}
-
-        # Fail if any usernames couldn't be resolved
-        unresolved = [m for m in members if m not in resolved_usernames]
-        if unresolved:
-            module.fail_json(
-                msg=f"Could not resolve identities for: {', '.join(unresolved)}. "
-                f"Users may not exist or usernames may be incorrect."
-            )
-
-        # Build set of desired identity IDs
-        desired_identity_ids = {i["id"] for i in identities}
+        # Use shared utility to resolve usernames to identity IDs
+        # This handles usernames, UUIDs, and URNs consistently
+        resolved_ids = api.resolve_principals(members, output_format="id")
+        desired_identity_ids = set(resolved_ids)
 
         # Find members to add and remove
         to_add = desired_identity_ids - current_members_with_role

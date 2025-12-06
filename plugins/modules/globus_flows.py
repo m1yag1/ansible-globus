@@ -37,17 +37,25 @@ options:
         type: list
         elements: str
     visible_to:
-        description: Visibility settings for the flow
+        description:
+            - Visibility settings for the flow.
+            - Accepts usernames (e.g., user@globusid.org), identity URNs, group URNs, or special values.
+            - Special values include 'public' and 'all_authenticated_users'.
         required: false
         type: list
         elements: str
     runnable_by:
-        description: Who can run this flow
+        description:
+            - Who can run this flow.
+            - Accepts usernames (e.g., user@globusid.org), identity URNs, group URNs, or special values.
+            - Special values include 'public' and 'all_authenticated_users'.
         required: false
         type: list
         elements: str
     administered_by:
-        description: Who can administer this flow
+        description:
+            - Who can administer this flow.
+            - Accepts usernames (e.g., user@globusid.org), identity URNs, or group URNs.
         required: false
         type: list
         elements: str
@@ -232,10 +240,9 @@ def create_flow(api, params):
         api.fail_json(msg=error_msg)
 
 
-def update_flow(api, flow_id, params):
-    """Update an existing flow using SDK."""
+def update_flow(api, flow_id, params, existing_flow=None):
+    """Update an existing flow using SDK (only if values changed)."""
     try:
-        # Prepare kwargs for update_flow (SDK v4 uses individual keyword arguments)
         update_kwargs = {}
 
         # Map module parameter names to API field names for updatable fields
@@ -250,15 +257,30 @@ def update_flow(api, flow_id, params):
         }
 
         for module_field, api_field in field_mapping.items():
-            if params.get(module_field) is not None:
-                update_kwargs[api_field] = params[module_field]
+            new_val = params.get(module_field)
+            if new_val is not None:
+                # Compare with existing value if available
+                if existing_flow:
+                    existing_val = existing_flow.get(api_field)
+                    if new_val != existing_val:
+                        update_kwargs[api_field] = new_val
+                else:
+                    update_kwargs[api_field] = new_val
 
-        # Definition updates require special handling
+        # Definition updates - compare if existing
         if params.get("definition") is not None:
-            update_kwargs["definition"] = params["definition"]
+            if existing_flow:
+                if params["definition"] != existing_flow.get("definition"):
+                    update_kwargs["definition"] = params["definition"]
+            else:
+                update_kwargs["definition"] = params["definition"]
 
         if params.get("input_schema") is not None:
-            update_kwargs["input_schema"] = params["input_schema"]
+            if existing_flow:
+                if params["input_schema"] != existing_flow.get("input_schema"):
+                    update_kwargs["input_schema"] = params["input_schema"]
+            else:
+                update_kwargs["input_schema"] = params["input_schema"]
 
         if update_kwargs:
             response = api.flows_client.update_flow(flow_id, **update_kwargs)
@@ -309,7 +331,8 @@ def main():
         mutually_exclusive=[("definition", "definition_file")],
     )
 
-    api = GlobusSDKClient(module, required_services=["flows"])
+    # Include "groups" service for username resolution via AuthClient
+    api = GlobusSDKClient(module, required_services=["flows", "groups"])
 
     title = module.params["title"]
     state = module.params["state"]
@@ -345,20 +368,27 @@ def main():
         if definition:
             params_with_definition["definition"] = definition
 
+        # Resolve usernames to identity URNs for principal fields
+        for field in ["visible_to", "runnable_by", "administered_by"]:
+            if params_with_definition.get(field):
+                params_with_definition[field] = api.resolve_principals(
+                    params_with_definition[field], output_format="urn"
+                )
+
         if existing_flow:
             # Update existing flow
             changed = False
             flow_id = existing_flow["id"]
 
-            # Update flow properties
-            update_result = update_flow(api, flow_id, params_with_definition)
+            # Update flow properties (only if changed)
+            update_result = update_flow(
+                api, flow_id, params_with_definition, existing_flow
+            )
             if update_result:
                 changed = True
 
-            # Deploy flow if requested
-            if module.params.get("deploy", True):
-                deploy_flow(api, flow_id)
-                changed = True
+            # Note: Flows are automatically deployed when created/updated
+            # The deploy parameter is kept for backwards compatibility but has no effect
 
             # Generate flow scope for timer/external use
             flow_scope = (
@@ -379,10 +409,6 @@ def main():
 
             flow = create_flow(api, params_with_definition)
             flow_id = flow["id"]
-
-            # Deploy flow if requested
-            if module.params.get("deploy", True):
-                deploy_flow(api, flow_id)
 
             # Generate flow scope for timer/external use
             flow_scope = (

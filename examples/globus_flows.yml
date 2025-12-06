@@ -1,0 +1,198 @@
+---
+# Example: Managing Globus Flows
+#
+# This playbook demonstrates common flow management operations:
+#   1. Creating a flow with a definition and input_schema
+#   2. Using the HelloWorld ActionProvider
+#   3. Updating flow properties (description, permissions)
+#   4. Assigning users/groups to roles (visible_to, runnable_by, administered_by)
+#   5. Deleting a flow
+#
+# Prerequisites:
+#   - Set GLOBUS_CLIENT_ID and GLOBUS_CLIENT_SECRET environment variables
+#   - A Globus subscription (flows require a subscription)
+#
+# Run with:
+#   ansible-playbook examples/globus_flows.yml
+#
+# Reference:
+#   - HelloWorld AP: https://docs.globus.org/api/flows/hosted-action-providers/ap-hello-world/
+#   - Input Schema: https://docs.globus.org/api/flows/authoring-flows/flow-input-schema/
+
+- name: Manage Globus Flows
+  hosts: localhost
+  gather_facts: false
+
+  module_defaults:
+    group/m1yag1.globus.all:
+      auth_method: client_credentials
+      client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+      client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+
+  tasks:
+    # =========================================================================
+    # Create a flow with HelloWorld ActionProvider
+    # =========================================================================
+    # This example uses the HelloWorld ActionProvider which:
+    #   - Always returns {'Hello': 'World'}
+    #   - Optionally echoes a string and sleeps for a specified time
+    #
+    # The input_schema validates flow inputs before execution.
+    # Expression syntax ($.InputName or "value.=" expressions) allows
+    # dynamic parameter binding from flow inputs.
+
+    - name: Create HelloWorld flow with input schema
+      m1yag1.globus.globus_flows:
+        title: "hello-world-example"
+        subtitle: "Example flow using HelloWorld ActionProvider"
+        description: "Demonstrates ActionProvider usage with input schema validation"
+        definition:
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
+          States:
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                # Use expression syntax to bind flow input to action parameter
+                # The .= suffix indicates an expression that will be evaluated
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
+              End: true
+        # Input schema validates what users must provide when running the flow
+        # Uses JSON Schema format
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
+        keywords:
+          - "hello-world"
+          - "example"
+        state: present
+      register: flow_result
+
+    - name: Show flow details
+      ansible.builtin.debug:
+        msg: >-
+          Flow '{{ flow_result.title }}' created with ID: {{ flow_result.flow_id }}
+          (scope: {{ flow_result.flow_scope }})
+
+    # =========================================================================
+    # Update flow with permissions
+    # =========================================================================
+    # Make the flow publicly visible and runnable by authenticated users.
+    # The module only sends changes to the API (idempotent).
+
+    - name: Update flow with public visibility
+      m1yag1.globus.globus_flows:
+        title: "hello-world-example"
+        subtitle: "Example flow using HelloWorld ActionProvider"
+        description: "Demonstrates ActionProvider usage with input schema validation"
+        definition:
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
+          States:
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
+              End: true
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        state: present
+
+    # =========================================================================
+    # Assign specific users to roles
+    # =========================================================================
+    # You can use usernames, identity URNs, or group URNs.
+    # Usernames are automatically resolved to identity URNs.
+    #
+    # Format examples:
+    #   - Username: "user@globusid.org"
+    #   - Identity URN: "urn:globus:auth:identity:<uuid>"
+    #   - Group URN: "urn:globus:groups:id:<uuid>"
+
+    - name: Grant specific users admin access
+      m1yag1.globus.globus_flows:
+        title: "hello-world-example"
+        definition:
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
+          States:
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
+              End: true
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        # You can use usernames directly - they're resolved to URNs automatically
+        # administered_by:
+        #   - "admin@example.org"
+        state: present
+
+    # =========================================================================
+    # Delete a flow
+    # =========================================================================
+    # Set state: absent to delete the flow.
+    # Running flow instances will continue to completion.
+
+    - name: Delete the flow
+      m1yag1.globus.globus_flows:
+        title: "hello-world-example"
+        state: absent

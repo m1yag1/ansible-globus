@@ -1,0 +1,173 @@
+---
+# Example: Managing Globus Flows
+#
+# This playbook demonstrates common flow management operations:
+#   1. Creating a flow with a definition
+#   2. Updating flow properties (description, permissions)
+#   3. Assigning users/groups to roles (visible_to, runnable_by, administered_by)
+#   4. Updating the flow definition
+#   5. Deleting a flow
+#
+# Prerequisites:
+#   - Set GLOBUS_CLIENT_ID and GLOBUS_CLIENT_SECRET environment variables
+#   - A Globus subscription (flows require a subscription)
+#
+# Run with:
+#   ansible-playbook examples/globus_flows.yml
+
+- name: Manage Globus Flows
+  hosts: localhost
+  gather_facts: false
+
+  module_defaults:
+    group/m1yag1.globus.all:
+      auth_method: client_credentials
+      client_id: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+      client_secret: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+
+  tasks:
+    # =========================================================================
+    # Create a flow with a definition
+    # =========================================================================
+    # Flows use Amazon States Language for defining workflows.
+    # The simplest flow uses a Pass state that does nothing.
+
+    - name: Create data processing flow
+      m1yag1.globus.globus_flows:
+        title: "data-processing-pipeline"
+        subtitle: "Automated data processing"
+        description: "Processes incoming data files through validation and transformation"
+        definition:
+          Comment: "Simple data processing flow"
+          StartAt: "ValidateInput"
+          States:
+            ValidateInput:
+              Type: "Pass"
+              Result:
+                status: "validated"
+              Next: "ProcessData"
+            ProcessData:
+              Type: "Pass"
+              Result:
+                status: "processed"
+              End: true
+        keywords:
+          - "data-processing"
+          - "automation"
+        state: present
+      register: flow_result
+
+    - name: Show flow details
+      ansible.builtin.debug:
+        msg: >-
+          Flow '{{ flow_result.title }}' created with ID: {{ flow_result.flow_id }}
+          (scope: {{ flow_result.flow_scope }})
+
+    # =========================================================================
+    # Update flow properties
+    # =========================================================================
+    # Update description and set permissions.
+    # The module only sends changes to the API (idempotent).
+
+    - name: Update flow with public visibility
+      m1yag1.globus.globus_flows:
+        title: "data-processing-pipeline"
+        subtitle: "Automated data processing"
+        description: "Updated: Processes data files with enhanced validation"
+        definition:
+          Comment: "Simple data processing flow"
+          StartAt: "ValidateInput"
+          States:
+            ValidateInput:
+              Type: "Pass"
+              Result:
+                status: "validated"
+              Next: "ProcessData"
+            ProcessData:
+              Type: "Pass"
+              Result:
+                status: "processed"
+              End: true
+        keywords:
+          - "data-processing"
+          - "automation"
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        state: present
+
+    # =========================================================================
+    # Assign specific users or groups to roles
+    # =========================================================================
+    # Use identity URNs to grant specific users or groups access.
+    # Format: urn:globus:auth:identity:<user_uuid>
+    #         urn:globus:groups:id:<group_uuid>
+
+    - name: Grant specific users access to the flow
+      m1yag1.globus.globus_flows:
+        title: "data-processing-pipeline"
+        definition:
+          Comment: "Simple data processing flow"
+          StartAt: "ValidateInput"
+          States:
+            ValidateInput:
+              Type: "Pass"
+              Result:
+                status: "validated"
+              Next: "ProcessData"
+            ProcessData:
+              Type: "Pass"
+              Result:
+                status: "processed"
+              End: true
+        # Mix special values with specific identity URNs
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+          - "urn:globus:auth:identity:{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+        administered_by:
+          - "urn:globus:auth:identity:{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+        state: present
+
+    # =========================================================================
+    # Update flow definition
+    # =========================================================================
+    # You can update the flow definition at any time.
+    # Running flows will complete with their original definition.
+
+    - name: Update flow definition with new state
+      m1yag1.globus.globus_flows:
+        title: "data-processing-pipeline"
+        definition:
+          Comment: "Enhanced data processing flow with archiving"
+          StartAt: "ValidateInput"
+          States:
+            ValidateInput:
+              Type: "Pass"
+              Result:
+                status: "validated"
+              Next: "ProcessData"
+            ProcessData:
+              Type: "Pass"
+              Result:
+                status: "processed"
+              Next: "ArchiveResults"
+            ArchiveResults:
+              Type: "Pass"
+              Result:
+                status: "archived"
+              End: true
+        state: present
+
+    # =========================================================================
+    # Delete a flow
+    # =========================================================================
+    # Set state: absent to delete the flow.
+    # Running flow instances will continue to completion.
+
+    - name: Delete the flow
+      m1yag1.globus.globus_flows:
+        title: "data-processing-pipeline"
+        state: absent

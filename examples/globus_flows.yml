@@ -2,10 +2,10 @@
 # Example: Managing Globus Flows
 #
 # This playbook demonstrates common flow management operations:
-#   1. Creating a flow with a definition
-#   2. Updating flow properties (description, permissions)
-#   3. Assigning users/groups to roles (visible_to, runnable_by, administered_by)
-#   4. Updating the flow definition
+#   1. Creating a flow with a definition and input_schema
+#   2. Using the HelloWorld ActionProvider
+#   3. Updating flow properties (description, permissions)
+#   4. Assigning users/groups to roles (visible_to, runnable_by, administered_by)
 #   5. Deleting a flow
 #
 # Prerequisites:
@@ -14,6 +14,10 @@
 #
 # Run with:
 #   ansible-playbook examples/globus_flows.yml
+#
+# Reference:
+#   - HelloWorld AP: https://docs.globus.org/api/flows/hosted-action-providers/ap-hello-world/
+#   - Input Schema: https://docs.globus.org/api/flows/authoring-flows/flow-input-schema/
 
 - name: Manage Globus Flows
   hosts: localhost
@@ -27,33 +31,56 @@
 
   tasks:
     # =========================================================================
-    # Create a flow with a definition
+    # Create a flow with HelloWorld ActionProvider
     # =========================================================================
-    # Flows use Amazon States Language for defining workflows.
-    # The simplest flow uses a Pass state that does nothing.
+    # This example uses the HelloWorld ActionProvider which:
+    #   - Always returns {'Hello': 'World'}
+    #   - Optionally echoes a string and sleeps for a specified time
+    #
+    # The input_schema validates flow inputs before execution.
+    # Expression syntax ($.InputName or "value.=" expressions) allows
+    # dynamic parameter binding from flow inputs.
 
-    - name: Create data processing flow
+    - name: Create HelloWorld flow with input schema
       m1yag1.globus.globus_flows:
-        title: "data-processing-pipeline"
-        subtitle: "Automated data processing"
-        description: "Processes incoming data files through validation and transformation"
+        title: "hello-world-example"
+        subtitle: "Example flow using HelloWorld ActionProvider"
+        description: "Demonstrates ActionProvider usage with input schema validation"
         definition:
-          Comment: "Simple data processing flow"
-          StartAt: "ValidateInput"
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
           States:
-            ValidateInput:
-              Type: "Pass"
-              Result:
-                status: "validated"
-              Next: "ProcessData"
-            ProcessData:
-              Type: "Pass"
-              Result:
-                status: "processed"
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                # Use expression syntax to bind flow input to action parameter
+                # The .= suffix indicates an expression that will be evaluated
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
               End: true
+        # Input schema validates what users must provide when running the flow
+        # Uses JSON Schema format
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
         keywords:
-          - "data-processing"
-          - "automation"
+          - "hello-world"
+          - "example"
         state: present
       register: flow_result
 
@@ -64,33 +91,44 @@
           (scope: {{ flow_result.flow_scope }})
 
     # =========================================================================
-    # Update flow properties
+    # Update flow with permissions
     # =========================================================================
-    # Update description and set permissions.
+    # Make the flow publicly visible and runnable by authenticated users.
     # The module only sends changes to the API (idempotent).
 
     - name: Update flow with public visibility
       m1yag1.globus.globus_flows:
-        title: "data-processing-pipeline"
-        subtitle: "Automated data processing"
-        description: "Updated: Processes data files with enhanced validation"
+        title: "hello-world-example"
+        subtitle: "Example flow using HelloWorld ActionProvider"
+        description: "Demonstrates ActionProvider usage with input schema validation"
         definition:
-          Comment: "Simple data processing flow"
-          StartAt: "ValidateInput"
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
           States:
-            ValidateInput:
-              Type: "Pass"
-              Result:
-                status: "validated"
-              Next: "ProcessData"
-            ProcessData:
-              Type: "Pass"
-              Result:
-                status: "processed"
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
               End: true
-        keywords:
-          - "data-processing"
-          - "automation"
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
         visible_to:
           - "public"
         runnable_by:
@@ -98,67 +136,54 @@
         state: present
 
     # =========================================================================
-    # Assign specific users or groups to roles
+    # Assign specific users to roles
     # =========================================================================
-    # Use identity URNs to grant specific users or groups access.
-    # Format: urn:globus:auth:identity:<user_uuid>
-    #         urn:globus:groups:id:<group_uuid>
+    # You can use usernames, identity URNs, or group URNs.
+    # Usernames are automatically resolved to identity URNs.
+    #
+    # Format examples:
+    #   - Username: "user@globusid.org"
+    #   - Identity URN: "urn:globus:auth:identity:<uuid>"
+    #   - Group URN: "urn:globus:groups:id:<uuid>"
 
-    - name: Grant specific users access to the flow
+    - name: Grant specific users admin access
       m1yag1.globus.globus_flows:
-        title: "data-processing-pipeline"
+        title: "hello-world-example"
         definition:
-          Comment: "Simple data processing flow"
-          StartAt: "ValidateInput"
+          Comment: "A simple flow that greets the user"
+          StartAt: "HelloWorld"
           States:
-            ValidateInput:
-              Type: "Pass"
-              Result:
-                status: "validated"
-              Next: "ProcessData"
-            ProcessData:
-              Type: "Pass"
-              Result:
-                status: "processed"
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string.=: "'Hello, ' + $.input.name + '!'"
+                sleep_time: 1
+              ResultPath: "$.HelloWorldResult"
               End: true
-        # Mix special values with specific identity URNs
+        input_schema:
+          type: "object"
+          properties:
+            input:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                  description: "Name to greet"
+                  minLength: 1
+              required:
+                - "name"
+              additionalProperties: false
+          required:
+            - "input"
+          additionalProperties: false
         visible_to:
           - "public"
         runnable_by:
           - "all_authenticated_users"
-          - "urn:globus:auth:identity:{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
-        administered_by:
-          - "urn:globus:auth:identity:{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
-        state: present
-
-    # =========================================================================
-    # Update flow definition
-    # =========================================================================
-    # You can update the flow definition at any time.
-    # Running flows will complete with their original definition.
-
-    - name: Update flow definition with new state
-      m1yag1.globus.globus_flows:
-        title: "data-processing-pipeline"
-        definition:
-          Comment: "Enhanced data processing flow with archiving"
-          StartAt: "ValidateInput"
-          States:
-            ValidateInput:
-              Type: "Pass"
-              Result:
-                status: "validated"
-              Next: "ProcessData"
-            ProcessData:
-              Type: "Pass"
-              Result:
-                status: "processed"
-              Next: "ArchiveResults"
-            ArchiveResults:
-              Type: "Pass"
-              Result:
-                status: "archived"
-              End: true
+        # You can use usernames directly - they're resolved to URNs automatically
+        # administered_by:
+        #   - "admin@example.org"
         state: present
 
     # =========================================================================
@@ -169,5 +194,5 @@
 
     - name: Delete the flow
       m1yag1.globus.globus_flows:
-        title: "data-processing-pipeline"
+        title: "hello-world-example"
         state: absent

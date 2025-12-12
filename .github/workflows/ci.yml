@@ -180,10 +180,10 @@ jobs:
     needs: [lint, unit-tests]
     strategy:
       fail-fast: false
-      max-parallel: 1  # Run sequentially to avoid race conditions on shared GCS instance
+      max-parallel: 2  # Can run in parallel - no shared state between auth methods
       matrix:
         sdk-version: ["4", "3"]  # SDK4 first (primary target)
-        auth-method: ["client_credentials", "oauth"]
+        auth-method: ["client_credentials", "cli"]
     permissions:
       id-token: write
       contents: read
@@ -221,8 +221,12 @@ jobs:
           ansible-galaxy collection build --force
           ansible-galaxy collection install m1yag1-globus-*.tar.gz --force
 
-      - name: Refresh OAuth tokens
-        if: matrix.auth-method == 'oauth'
+      - name: Install SDK dependencies
+        run: |
+          uv pip install --system globus-sdk boto3
+
+      - name: Refresh and create CLI storage.db
+        if: matrix.auth-method == 'cli'
         env:
           S3_TOKEN_BUCKET: ${{ secrets.S3_TOKEN_BUCKET }}
           S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
@@ -231,13 +235,10 @@ jobs:
           GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
           GLOBUS_SDK_ENVIRONMENT: test
         run: |
-          uv pip install --system globus-sdk boto3
-          python scripts/refresh_ci_tokens.py || echo "::warning::Token refresh failed - some tests may be skipped"
-
-      - name: Install SDK dependencies for client credentials
-        if: matrix.auth-method == 'client_credentials'
-        run: |
-          uv pip install --system globus-sdk boto3
+          # Refresh tokens in S3 first
+          python scripts/refresh_ci_tokens.py || echo "::warning::Token refresh failed"
+          # Create CLI-compatible storage.db from S3 tokens
+          python scripts/create_cli_storage_db.py
 
       - name: Setup SSH for GCS instance
         env:
@@ -249,12 +250,9 @@ jobs:
 
       - name: Run integration tests with tox
         env:
-          S3_TOKEN_BUCKET: ${{ matrix.auth-method == 'oauth' && secrets.S3_TOKEN_BUCKET || '' }}
-          S3_TOKEN_KEY: ${{ secrets.S3_TOKEN_KEY }}
-          S3_TOKEN_NAMESPACE: ${{ secrets.S3_TOKEN_NAMESPACE || 'github-actions' }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+          # Client credentials only needed for client_credentials auth
           GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
-          GLOBUS_CLIENT_SECRET: ${{ secrets.GLOBUS_CLIENT_SECRET }}
+          GLOBUS_CLIENT_SECRET: ${{ matrix.auth-method == 'client_credentials' && secrets.GLOBUS_CLIENT_SECRET || '' }}
           GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
           GLOBUS_SDK_ENVIRONMENT: test
           TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}

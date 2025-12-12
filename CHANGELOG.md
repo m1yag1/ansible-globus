@@ -5,6 +5,36 @@ All notable changes to the Ansible Globus Collection will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-12
+
+### Added
+
+- **search**: Add globus_search module for managing Search indexes
+- Add globus action group for module_defaults
+
+### Changed
+
+- **globus_group**: Use shared resolve_principals utility
+
+### Documentation
+
+- **search**: Remove misleading access_token example
+- **examples**: Add globus_search example playbook
+- **examples**: Update flows example with HelloWorld ActionProvider
+
+### Fixed
+
+- **tox**: Correct collection namespace in galaxy environments
+- **tests**: Disable coverage for integration tests
+- **group**: Use SDK client methods for member management
+- **group**: Warn when member/admin usernames cannot be resolved
+- **group**: Implement declarative member management
+- **flows**: Improve idempotency and add username resolution
+
+### Miscellaneous Tasks
+
+- Expand build_ignore to exclude dev files from collection
+
 ## [0.3.0] - 2025-12-04
 
 ### Added

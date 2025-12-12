@@ -47,17 +47,14 @@ class GlobusSDKClient(GlobusModuleBase):
         super().__init__(module)
         self.client_id: str | None = module.params.get("client_id")
         self.client_secret: str | None = module.params.get("client_secret")
-        self.access_token: str | None = module.params.get("access_token")
 
         # Auto-detect auth method if not explicitly specified
-        # Priority: client_credentials > access_token > cli
+        # Priority: client_credentials > cli
         explicit_auth_method = module.params.get("auth_method")
         if explicit_auth_method:
             self.auth_method = explicit_auth_method
         elif self.client_id and self.client_secret:
             self.auth_method = "client_credentials"
-        elif self.access_token:
-            self.auth_method = "access_token"
         else:
             self.auth_method = "cli"
 
@@ -170,20 +167,6 @@ class GlobusSDKClient(GlobusModuleBase):
                     "search.api.globus.org"
                 ]["access_token"]
                 self.search_authorizer = AccessTokenAuthorizer(search_token)
-
-        elif self.auth_method == "access_token":
-            if not self.access_token:
-                self.fail_json("access_token required for access_token auth")
-
-            # Use the same token for all services (assumes it has all required scopes)
-            authorizer = AccessTokenAuthorizer(self.access_token)
-            self.transfer_authorizer = authorizer
-            self.groups_authorizer = authorizer
-            self.compute_authorizer = authorizer
-            self.flows_authorizer = authorizer
-            self.timers_authorizer = authorizer
-            self.auth_authorizer = authorizer
-            self.search_authorizer = authorizer
 
         elif self.auth_method == "cli":
             self._authenticate_cli()
@@ -310,8 +293,8 @@ class GlobusSDKClient(GlobusModuleBase):
     def auth_client(self) -> t.Any:
         """Get Auth API client for projects/policies management."""
         # For auth operations, we use the auth client created in _authenticate
-        # or create one with the auth authorizer if using access_token method
-        if hasattr(self, "auth_authorizer") and self.auth_method == "access_token":
+        # For cli auth, create an AuthClient with the auth_authorizer
+        if hasattr(self, "auth_authorizer") and self.auth_method == "cli":
             from globus_sdk import AuthClient
 
             if self._auth_client is None or not isinstance(

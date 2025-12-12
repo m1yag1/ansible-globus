@@ -19,7 +19,6 @@ def create_mock_module(params=None):
         "auth_method": None,
         "client_id": None,
         "client_secret": None,
-        "access_token": None,
     }
     if params:
         default_params.update(params)
@@ -74,25 +73,6 @@ class TestAuthMethodAutoDetection:
 
     @mock.patch("plugins.module_utils.globus_sdk_client.GlobusSDKClient._authenticate")
     @mock.patch("plugins.module_utils.globus_sdk_client.GlobusModuleBase.__init__")
-    def test_auto_detect_access_token(self, mock_base_init, mock_authenticate):
-        """Test auto-detection of access_token auth when only access_token provided."""
-        mock_base_init.return_value = None
-
-        from plugins.module_utils.globus_sdk_client import GlobusSDKClient
-
-        mock_module = create_mock_module(
-            {
-                "auth_method": None,  # Not specified
-                "access_token": "test_access_token",
-            }
-        )
-
-        client = GlobusSDKClient(mock_module, required_services=["transfer"])
-
-        assert client.auth_method == "access_token"
-
-    @mock.patch("plugins.module_utils.globus_sdk_client.GlobusSDKClient._authenticate")
-    @mock.patch("plugins.module_utils.globus_sdk_client.GlobusModuleBase.__init__")
     def test_auto_detect_cli_fallback(self, mock_base_init, mock_authenticate):
         """Test fallback to cli auth when no credentials provided."""
         mock_base_init.return_value = None
@@ -104,7 +84,6 @@ class TestAuthMethodAutoDetection:
                 "auth_method": None,
                 "client_id": None,
                 "client_secret": None,
-                "access_token": None,
             }
         )
 
@@ -135,10 +114,10 @@ class TestAuthMethodAutoDetection:
 
     @mock.patch("plugins.module_utils.globus_sdk_client.GlobusSDKClient._authenticate")
     @mock.patch("plugins.module_utils.globus_sdk_client.GlobusModuleBase.__init__")
-    def test_client_credentials_takes_priority_over_access_token(
+    def test_client_secret_alone_falls_back_to_cli(
         self, mock_base_init, mock_authenticate
     ):
-        """Test that client_credentials takes priority over access_token."""
+        """Test that client_secret without client_id falls back to cli."""
         mock_base_init.return_value = None
 
         from plugins.module_utils.globus_sdk_client import GlobusSDKClient
@@ -146,13 +125,12 @@ class TestAuthMethodAutoDetection:
         mock_module = create_mock_module(
             {
                 "auth_method": None,
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "access_token": "test_access_token",  # Both provided
+                "client_id": None,
+                "client_secret": "test_client_secret",  # Only secret, no client_id
             }
         )
 
         client = GlobusSDKClient(mock_module, required_services=["transfer"])
 
-        # client_credentials should take priority
-        assert client.auth_method == "client_credentials"
+        # Should fall back to cli since both client_id AND secret are required
+        assert client.auth_method == "cli"

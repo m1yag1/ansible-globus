@@ -182,8 +182,15 @@ jobs:
       fail-fast: false
       max-parallel: 1  # Sequential to avoid search index conflicts (3 trial limit)
       matrix:
-        sdk-version: ["4", "3"]  # SDK4 first (primary target)
-        auth-method: ["client_credentials", "cli"]
+        include:
+          # SDK4: test both auth methods (primary target)
+          - sdk-version: "4"
+            auth-method: "client_credentials"
+          - sdk-version: "4"
+            auth-method: "cli"
+          # SDK3: only test client_credentials (compatibility check)
+          - sdk-version: "3"
+            auth-method: "client_credentials"
     permissions:
       id-token: write
       contents: read

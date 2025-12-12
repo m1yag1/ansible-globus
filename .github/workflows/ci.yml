@@ -257,9 +257,10 @@ jobs:
 
       - name: Run integration tests with tox
         env:
-          # Client credentials only needed for client_credentials auth
+          # GLOBUS_CLIENT_ID/SECRET always needed for GCS tests (remote GCS CLI auth)
+          # The auth-method only affects Ansible module auth, not GCS CLI
           GLOBUS_CLIENT_ID: ${{ secrets.GLOBUS_CLIENT_ID }}
-          GLOBUS_CLIENT_SECRET: ${{ matrix.auth-method == 'client_credentials' && secrets.GLOBUS_CLIENT_SECRET || '' }}
+          GLOBUS_CLIENT_SECRET: ${{ secrets.GLOBUS_CLIENT_SECRET }}
           GLOBUS_ADMIN_IDS: ${{ secrets.GLOBUS_ADMIN_IDS }}
           GLOBUS_SDK_ENVIRONMENT: test
           TEST_GCS_PROJECT_ID: ${{ secrets.GLOBUS_PROJECT_ID }}

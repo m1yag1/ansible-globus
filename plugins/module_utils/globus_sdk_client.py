@@ -4,6 +4,9 @@ Globus SDK-based client for Ansible modules.
 Supports both Globus SDK v3 and v4 via compatibility layer.
 """
 
+import json
+import os
+import sqlite3
 import typing as t
 
 from globus_sdk import (
@@ -42,10 +45,18 @@ class GlobusSDKClient(GlobusModuleBase):
         self, module: t.Any, required_services: list[str] | None = None
     ) -> None:
         super().__init__(module)
-        self.auth_method: str = module.params.get("auth_method", "client_credentials")
         self.client_id: str | None = module.params.get("client_id")
         self.client_secret: str | None = module.params.get("client_secret")
-        self.access_token: str | None = module.params.get("access_token")
+
+        # Auto-detect auth method if not explicitly specified
+        # Priority: client_credentials > cli
+        explicit_auth_method = module.params.get("auth_method")
+        if explicit_auth_method:
+            self.auth_method = explicit_auth_method
+        elif self.client_id and self.client_secret:
+            self.auth_method = "client_credentials"
+        else:
+            self.auth_method = "cli"
 
         # Only request scopes for services that are actually needed
         self.required_services = required_services or [
@@ -157,22 +168,89 @@ class GlobusSDKClient(GlobusModuleBase):
                 ]["access_token"]
                 self.search_authorizer = AccessTokenAuthorizer(search_token)
 
-        elif self.auth_method == "access_token":
-            if not self.access_token:
-                self.fail_json("access_token required for access_token auth")
-
-            # Use the same token for all services (assumes it has all required scopes)
-            authorizer = AccessTokenAuthorizer(self.access_token)
-            self.transfer_authorizer = authorizer
-            self.groups_authorizer = authorizer
-            self.compute_authorizer = authorizer
-            self.flows_authorizer = authorizer
-            self.timers_authorizer = authorizer
-            self.auth_authorizer = authorizer
-            self.search_authorizer = authorizer
+        elif self.auth_method == "cli":
+            self._authenticate_cli()
 
         else:
             self.fail_json(f"Unsupported auth method: {self.auth_method}")
+
+    def _authenticate_cli(self) -> None:
+        """Authenticate using cached globus-cli tokens from storage.db.
+
+        Reads tokens from ~/.globus/cli/storage.db (the globus-cli token store).
+        This enables a seamless experience where users authenticate once via
+        'globus login' and subsequent Ansible runs use the cached tokens.
+
+        Environment variables:
+            GLOBUS_SDK_ENVIRONMENT: Environment name (production, test, sandbox)
+            GLOBUS_PROFILE: Optional profile name for multi-profile setups
+        """
+        # Determine storage.db path
+        db_path = os.path.expanduser("~/.globus/cli/storage.db")
+
+        if not os.path.exists(db_path):
+            self.fail_json(
+                msg="No globus-cli tokens found. Run 'globus login' first to authenticate."
+            )
+
+        # Determine namespace from environment
+        environment = os.environ.get("GLOBUS_SDK_ENVIRONMENT", "production")
+        profile = os.environ.get("GLOBUS_PROFILE", "")
+        namespace = f"userprofile/{environment}" + (f"/{profile}" if profile else "")
+
+        # Map services to resource servers
+        resource_servers = {
+            "transfer": "transfer.api.globus.org",
+            "groups": "groups.api.globus.org",
+            "flows": "flows.globus.org",
+            "timers": "524230d7-ea86-4a52-8312-86065a9e0417",
+            "search": "search.api.globus.org",
+            "auth": "auth.globus.org",
+            "compute": "funcx_service",
+        }
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            for service in self.required_services:
+                rs = resource_servers.get(service)
+                if not rs:
+                    continue
+
+                cursor.execute(
+                    "SELECT token_data_json FROM token_storage "
+                    "WHERE namespace = ? AND resource_server = ?",
+                    (namespace, rs),
+                )
+                row = cursor.fetchone()
+
+                if not row:
+                    self.fail_json(
+                        msg=f"No token found for {service} (resource_server={rs}) "
+                        f"in namespace '{namespace}'. "
+                        f"Run 'globus login' and consent to the required scopes."
+                    )
+
+                token_data = json.loads(row[0])
+                access_token = token_data.get("access_token")
+
+                if not access_token:
+                    self.fail_json(
+                        msg=f"Token for {service} has no access_token. "
+                        f"Run 'globus login' to refresh tokens."
+                    )
+
+                # Create authorizer for this service
+                authorizer = AccessTokenAuthorizer(access_token)
+                setattr(self, f"{service}_authorizer", authorizer)
+
+            conn.close()
+
+        except sqlite3.Error as e:
+            self.fail_json(msg=f"Failed to read globus-cli tokens: {e}")
+        except json.JSONDecodeError as e:
+            self.fail_json(msg=f"Invalid token data in storage.db: {e}")
 
     @property
     def transfer_client(self) -> TransferClient | None:
@@ -215,8 +293,8 @@ class GlobusSDKClient(GlobusModuleBase):
     def auth_client(self) -> t.Any:
         """Get Auth API client for projects/policies management."""
         # For auth operations, we use the auth client created in _authenticate
-        # or create one with the auth authorizer if using access_token method
-        if hasattr(self, "auth_authorizer") and self.auth_method == "access_token":
+        # For cli auth, create an AuthClient with the auth_authorizer
+        if hasattr(self, "auth_authorizer") and self.auth_method == "cli":
             from globus_sdk import AuthClient
 
             if self._auth_client is None or not isinstance(

@@ -180,7 +180,7 @@ jobs:
     needs: [lint, unit-tests]
     strategy:
       fail-fast: false
-      max-parallel: 2  # Can run in parallel - no shared state between auth methods
+      max-parallel: 1  # Sequential to avoid search index conflicts (3 trial limit)
       matrix:
         sdk-version: ["4", "3"]  # SDK4 first (primary target)
         auth-method: ["client_credentials", "cli"]

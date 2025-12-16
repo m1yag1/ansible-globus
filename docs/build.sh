@@ -28,5 +28,8 @@ find rst -name '*.rst' -exec sed -i '' 's/M1yag1/m1yag1/g' {} \;
 # Copy conf.py and index.rst into source directory for Sphinx
 cp conf.py index.rst rst/
 
+# Copy user-written documentation directories
+cp -r getting-started rst/
+
 # Build Sphinx site
 sphinx-build -M html rst _build -W --keep-going

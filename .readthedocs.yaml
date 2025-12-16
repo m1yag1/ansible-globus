@@ -19,8 +19,9 @@ build:
       # Fix title case
       - find docs/rst -name '*.rst' -exec sed -i 's/M1Yag1\.Globus/m1yag1.globus/g' {} \;
       - find docs/rst -name '*.rst' -exec sed -i 's/M1yag1/m1yag1/g' {} \;
-      # Copy Sphinx config files
+      # Copy Sphinx config files and user-written docs
       - cp docs/conf.py docs/index.rst docs/rst/
+      - cp -r docs/getting-started docs/rst/
 
 sphinx:
   configuration: docs/rst/conf.py

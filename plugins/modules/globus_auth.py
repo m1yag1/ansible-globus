@@ -12,7 +12,7 @@ description:
     - "NOTE: Deletion of projects and OAuth clients currently requires high-assurance authentication (MFA within 30 minutes) and must be done manually via https://app.globus.org/settings/developers. This is a known issue in Globus Auth that may be resolved in the future."
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     resource_type:
         description: Type of auth resource to manage
@@ -116,6 +116,8 @@ options:
         type: str
         choices: ['present', 'absent']
         default: 'present'
+extends_documentation_fragment:
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""

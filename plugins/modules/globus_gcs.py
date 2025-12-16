@@ -28,7 +28,7 @@ description:
     - All operations run globus-connect-server CLI on target host
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     resource_type:
         description: Type of GCS resource to manage

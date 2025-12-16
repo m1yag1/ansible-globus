@@ -10,7 +10,7 @@ description:
     - Supports both one-time and recurring timers
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     name:
         description: Name/label for the timer
@@ -76,7 +76,7 @@ options:
         choices: ['present', 'absent', 'active', 'inactive']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""

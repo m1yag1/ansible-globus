@@ -12,7 +12,7 @@ description:
     - System-level multi-user endpoint management (setup/teardown)
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     resource_type:
         description: Type of resource to manage
@@ -107,7 +107,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""

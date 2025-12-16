@@ -9,7 +9,7 @@ description:
     - Deploy and manage workflow automation
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     title:
         description: Title of the flow
@@ -78,7 +78,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""

@@ -9,7 +9,7 @@ description:
     - Manage group membership and permissions
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     name:
         description: Name of the group
@@ -46,7 +46,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""

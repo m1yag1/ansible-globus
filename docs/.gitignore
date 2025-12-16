@@ -1,0 +1,5 @@
+# Sphinx build output
+_build/
+
+# Generated RST from antsibull-docs
+rst/

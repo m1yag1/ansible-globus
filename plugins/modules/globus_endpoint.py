@@ -18,7 +18,7 @@ description:
     - Configure endpoint settings and authentication
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     name:
         description: Display name of the endpoint
@@ -64,7 +64,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""
@@ -116,8 +116,8 @@ EXAMPLES = r"""
     state: present
   register: collab_endpoint
 
-# Using client credentials authentication
-- name: Create endpoint with client credentials
+# Using service credentials
+- name: Create endpoint with service credentials
   globus_endpoint:
     name: "Production Endpoint"
     description: "Production data transfer endpoint"
@@ -125,7 +125,6 @@ EXAMPLES = r"""
     contact_email: "support@university.edu"
     endpoint_type: server
     public: true
-    auth_method: client_credentials
     client_id: "{{ vault_globus_client_id }}"
     client_secret: "{{ vault_globus_client_secret }}"
     state: present

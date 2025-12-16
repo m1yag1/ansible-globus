@@ -9,7 +9,7 @@ description:
     - Configure collection access and permissions
 version_added: "1.0.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     name:
         description: Display name of the collection
@@ -66,7 +66,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 """
 
 EXAMPLES = r"""
@@ -163,7 +163,7 @@ EXAMPLES = r"""
       public: false
       keywords: ["scratch", "temporary", "hpc"]
 
-# Collection with client credentials authentication
+# Collection with service credentials
 - name: Create collection with service credentials
   globus_collection:
     name: "Production Data Repository"
@@ -174,7 +174,6 @@ EXAMPLES = r"""
     organization: "Research Computing Services"
     contact_email: "data-services@university.edu"
     public: true
-    auth_method: client_credentials
     client_id: "{{ vault_globus_client_id }}"
     client_secret: "{{ vault_globus_client_secret }}"
     keywords:

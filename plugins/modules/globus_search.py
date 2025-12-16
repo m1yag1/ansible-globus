@@ -10,7 +10,7 @@ description:
     - Contact support@globus.org for subscription upgrades
 version_added: "0.4.0"
 author:
-    - Ansible Globus Module Contributors
+    - m1yag1
 options:
     name:
         description:
@@ -31,7 +31,7 @@ options:
         choices: ['present', 'absent']
         default: 'present'
 extends_documentation_fragment:
-    - globus_auth
+    - m1yag1.globus.globus_auth
 notes:
     - Trial indexes are limited to 1 MB and automatically deleted after 30 days
     - Free tier accounts can have up to 3 trial indexes
@@ -41,7 +41,7 @@ notes:
 
 EXAMPLES = r"""
 - name: Create a Globus Search index
-  m1yag1.globus.globus_search:
+  globus_search:
     name: "research-publications"
     description: "Index for research publications metadata"
     client_id: "{{ globus_client_id }}"
@@ -49,7 +49,7 @@ EXAMPLES = r"""
     state: present
 
 - name: Update an existing search index description
-  m1yag1.globus.globus_search:
+  globus_search:
     name: "research-publications"
     description: "Updated description for publications index"
     client_id: "{{ globus_client_id }}"
@@ -57,7 +57,7 @@ EXAMPLES = r"""
     state: present
 
 - name: Delete a search index
-  m1yag1.globus.globus_search:
+  globus_search:
     name: "old-index"
     client_id: "{{ globus_client_id }}"
     client_secret: "{{ globus_client_secret }}"

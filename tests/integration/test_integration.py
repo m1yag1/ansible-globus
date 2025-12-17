@@ -231,6 +231,7 @@ def test_flow_management_with_file(
     - name: Delete test flow
       m1yag1.globus.globus_flows:
         title: "{{{{ flow_result.title }}}}"
+        flow_id: "{{{{ flow_result.flow_id }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent
       register: delete_result
@@ -409,6 +410,7 @@ def test_flow_timer(
     - name: Delete flow
       m1yag1.globus.globus_flows:
         title: "{{{{ flow_result.title }}}}"
+        flow_id: "{{{{ flow_result.flow_id }}}}"
         {ansible_playbook_auth_params_flows}
         state: absent
       register: flow_delete

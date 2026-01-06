@@ -5,6 +5,32 @@ All notable changes to the Ansible Globus Collection will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-01-06
+
+### Added
+
+- **auth**: Add CLI auth method and auto-detection
+
+### Changed
+
+- **auth**: Remove unused access_token auth method
+
+### Documentation
+
+- Add Sphinx documentation with ReadTheDocs support
+- Restructure documentation with getting started guide
+
+### Fixed
+
+- **ci**: Revert to sequential integration tests
+- **ci**: Always provide GLOBUS_CLIENT_SECRET for GCS tests ([#7](https://github.com/m1yag1/ansible-globus/issues/7)) ([#7](7))
+- **tests**: Use flow_id for delete operations to avoid lookup issues
+- **errors**: Improve API error handling with user-friendly messages
+
+### Performance
+
+- **ci**: Reduce integration matrix from 4 to 3 jobs
+
 ## [0.4.0] - 2025-12-12
 
 ### Added

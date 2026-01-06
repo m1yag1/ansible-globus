@@ -3,16 +3,8 @@
 Authentication
 ==============
 
-+----------------------+------------------+------------------+
-| Method               | Use case         | Automation-ready |
-+======================+==================+==================+
-| CLI tokens           | Development      | No               |
-+----------------------+------------------+------------------+
-| Client credentials   | Production, CI   | Yes              |
-+----------------------+------------------+------------------+
-
-CLI Tokens
-----------
+CLI
+---
 
 The simplest method. Install the Globus CLI and authenticate:
 
@@ -32,7 +24,7 @@ For multiple identities, use profiles:
 
    GLOBUS_PROFILE=work ansible-playbook playbook.yml
 
-CLI tokens expire and require re-authentication. For unattended automation,
+Tokens expire and require re-authentication. For unattended automation,
 use client credentials.
 
 Client Credentials

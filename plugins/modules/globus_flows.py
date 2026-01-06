@@ -226,18 +226,36 @@ def create_flow(api, params):
         response = api.flows_client.create_flow(**create_kwargs)
         return response.data
     except Exception as e:
-        # Enhanced error reporting for debugging
+        # Parse Globus API error for user-friendly message
         import json
 
-        error_msg = f"Failed to create flow: {e}"
+        error_code = None
+        error_detail = None
         if hasattr(e, "text"):
-            error_msg += f"\nAPI Response: {e.text}"
-        if hasattr(e, "http_status"):
-            error_msg += f"\nHTTP Status: {e.http_status}"
-        error_msg += (
-            f"\nParameters sent: {json.dumps(create_kwargs, indent=2, default=str)}"
+            try:
+                error_data = json.loads(e.text)
+                error_code = error_data.get("error", {}).get("code")
+                error_detail = error_data.get("error", {}).get("detail")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # User-friendly messages for common error codes
+        hints = {
+            "SUBSCRIPTION_MUST_BE_SPECIFIED": "Add 'subscription_id' parameter to specify which subscription to use.",
+        }
+
+        if error_code and error_code in hints:
+            msg = f"{error_detail} {hints[error_code]}"
+        elif error_detail:
+            msg = f"Failed to create flow: {error_detail}"
+        else:
+            msg = f"Failed to create flow: {e}"
+
+        api.fail_json(
+            msg=msg,
+            error_code=error_code,
+            http_status=getattr(e, "http_status", None),
         )
-        api.fail_json(msg=error_msg)
 
 
 def update_flow(api, flow_id, params, existing_flow=None):

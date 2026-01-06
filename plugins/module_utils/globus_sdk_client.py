@@ -310,19 +310,51 @@ class GlobusSDKClient(GlobusModuleBase):
             self._search_client = SearchClient(authorizer=self.search_authorizer)
         return self._search_client
 
+    # User-friendly hints for common Globus API error codes
+    ERROR_HINTS = {
+        "SUBSCRIPTION_MUST_BE_SPECIFIED": "Add 'subscription_id' parameter to specify which subscription to use.",
+        "NOT_FOUND": "The requested resource may have been deleted or you may not have access.",
+        "PERMISSION_DENIED": "Check that your credentials have the required permissions.",
+    }
+
     def handle_api_error(self, error: Exception, operation: str = "API call") -> None:
-        """Handle Globus API errors consistently."""
-        if hasattr(error, "http_status"):
+        """Handle Globus API errors consistently with user-friendly messages."""
+        import json
+
+        # Try to parse Globus API error for structured info
+        error_code = None
+        error_detail = None
+        if hasattr(error, "text"):
+            try:
+                error_data = json.loads(error.text)
+                error_code = error_data.get("error", {}).get("code")
+                error_detail = error_data.get("error", {}).get("detail")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Build user-friendly message
+        if error_code and error_code in self.ERROR_HINTS:
+            hint = self.ERROR_HINTS[error_code]
+            msg = f"{error_detail} {hint}" if error_detail else f"{error_code}: {hint}"
+        elif error_detail:
+            msg = f"Failed {operation}: {error_detail}"
+        elif hasattr(error, "http_status"):
             if error.http_status == 401:
-                self.fail_json(f"Authentication failed for {operation}: {error}")
+                msg = f"Authentication failed for {operation}. Check your credentials."
             elif error.http_status == 403:
-                self.fail_json(f"Permission denied for {operation}: {error}")
+                msg = f"Permission denied for {operation}. Check your access rights."
             elif error.http_status == 404:
-                self.fail_json(f"Resource not found for {operation}: {error}")
+                msg = f"Resource not found for {operation}."
             else:
-                self.fail_json(f"API error during {operation}: {error}")
+                msg = f"API error during {operation}: {error}"
         else:
-            self.fail_json(f"Unexpected error during {operation}: {error}")
+            msg = f"Unexpected error during {operation}: {error}"
+
+        self.fail_json(
+            msg=msg,
+            error_code=error_code,
+            http_status=getattr(error, "http_status", None),
+        )
 
     # Special principal values that should be passed through without resolution
     SPECIAL_PRINCIPALS = {"public", "all_authenticated_users"}

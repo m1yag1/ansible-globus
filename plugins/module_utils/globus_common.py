@@ -54,9 +54,9 @@ class GlobusModuleBase:
         self.result["changed"] = self.changed
         self.module.exit_json(**self.result)
 
-    def fail_json(self, msg: str) -> None:
-        """Exit with failure."""
-        self.module.fail_json(msg=msg)
+    def fail_json(self, msg: str = "", **kwargs: t.Any) -> None:
+        """Exit with failure, optionally including additional error details."""
+        self.module.fail_json(msg=msg, **kwargs)
 
 
 def globus_argument_spec() -> dict[str, t.Any]:

@@ -480,6 +480,230 @@ def test_idempotency(ansible_playbook_auth_params, create_playbook, run_playbook
     assert result.returncode == 0, f"Playbook failed: {result.stderr}"
 
 
+def test_flow_idempotency(
+    ansible_playbook_auth_params_flows,
+    test_playbooks_dir,
+    create_playbook,
+    run_playbook,
+):
+    """Test that globus_flows module is idempotent.
+
+    This test specifically verifies that:
+    1. Creating a flow with visible_to, runnable_by, definition, and input_schema works
+    2. Running the same playbook again reports changed=false
+    3. The flow_id remains the same across runs
+
+    This catches bugs where:
+    - List comparisons are order-sensitive (visible_to, runnable_by)
+    - Dict comparisons fail due to API-added fields (definition, input_schema)
+    """
+    subscription_id = os.getenv(
+        "TEST_GCS_SUBSCRIPTION_ID", "923ac990-9914-11ed-af9f-c53a64a5b6b4"
+    )
+
+    # Create a flow definition with nested structure to test deep comparison
+    flow_definition = {
+        "StartAt": "TestTransfer",
+        "States": {
+            "TestTransfer": {
+                "Type": "Action",
+                "ActionUrl": "https://actions.globus.org/hello_world",
+                "Parameters": {"echo_string": "Hello from idempotency test"},
+                "End": True,
+            }
+        },
+    }
+
+    flow_file_path = test_playbooks_dir / "idempotency_flow.json"
+    with open(flow_file_path, "w") as f:
+        json.dump(flow_definition, f, indent=2)
+
+    playbook_content = f"""
+---
+- hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Cleanup any existing test flow
+      m1yag1.globus.globus_flows:
+        title: "ansible-idempotency-flow-test"
+        {ansible_playbook_auth_params_flows}
+        state: absent
+      ignore_errors: true
+
+    - name: Create test flow (first run)
+      m1yag1.globus.globus_flows:
+        title: "ansible-idempotency-flow-test"
+        subtitle: "Idempotency test flow"
+        description: "Testing that flows module is idempotent"
+        definition_file: "{flow_file_path}"
+        input_schema:
+          type: object
+          properties:
+            message:
+              type: string
+          additionalProperties: true
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
+        {ansible_playbook_auth_params_flows}
+        state: present
+      register: first_run
+
+    - name: Verify flow was created
+      assert:
+        that:
+          - first_run.changed
+          - first_run.flow_id is defined
+
+    - name: Create same flow again (second run - idempotency check)
+      m1yag1.globus.globus_flows:
+        title: "ansible-idempotency-flow-test"
+        subtitle: "Idempotency test flow"
+        description: "Testing that flows module is idempotent"
+        definition_file: "{flow_file_path}"
+        input_schema:
+          type: object
+          properties:
+            message:
+              type: string
+          additionalProperties: true
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
+        {ansible_playbook_auth_params_flows}
+        state: present
+      register: second_run
+
+    - name: Verify idempotency - no changes on second run
+      assert:
+        that:
+          - not second_run.changed
+          - second_run.flow_id == first_run.flow_id
+        fail_msg: "Flow module is not idempotent! Second run reported changed={{{{ second_run.changed }}}}"
+
+    - name: Cleanup test flow
+      m1yag1.globus.globus_flows:
+        title: "ansible-idempotency-flow-test"
+        flow_id: "{{{{ first_run.flow_id }}}}"
+        {ansible_playbook_auth_params_flows}
+        state: absent
+"""
+
+    playbook_path = create_playbook(playbook_content)
+    result = run_playbook(playbook_path)
+
+    assert result.returncode == 0, f"Playbook failed: {result.stderr}"
+
+
+def test_flow_idempotency_with_inline_definition(
+    ansible_playbook_auth_params_flows,
+    create_playbook,
+    run_playbook,
+):
+    """Test flow idempotency with inline definition (not from file).
+
+    This is important because inline definitions go through different code paths
+    and the API may normalize/transform them differently.
+    """
+    subscription_id = os.getenv(
+        "TEST_GCS_SUBSCRIPTION_ID", "923ac990-9914-11ed-af9f-c53a64a5b6b4"
+    )
+
+    playbook_content = f"""
+---
+- hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Cleanup any existing test flow
+      m1yag1.globus.globus_flows:
+        title: "ansible-inline-idempotency-test"
+        {ansible_playbook_auth_params_flows}
+        state: absent
+      ignore_errors: true
+
+    - name: Create test flow with inline definition (first run)
+      m1yag1.globus.globus_flows:
+        title: "ansible-inline-idempotency-test"
+        definition:
+          StartAt: "HelloWorld"
+          States:
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string: "Test message"
+              End: true
+        input_schema:
+          type: object
+          properties: {{}}
+          additionalProperties: true
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
+        {ansible_playbook_auth_params_flows}
+        state: present
+      register: first_run
+
+    - name: Verify flow was created
+      assert:
+        that:
+          - first_run.changed
+          - first_run.flow_id is defined
+
+    - name: Create same flow again (idempotency check)
+      m1yag1.globus.globus_flows:
+        title: "ansible-inline-idempotency-test"
+        definition:
+          StartAt: "HelloWorld"
+          States:
+            HelloWorld:
+              Type: "Action"
+              ActionUrl: "https://actions.globus.org/hello_world"
+              Parameters:
+                echo_string: "Test message"
+              End: true
+        input_schema:
+          type: object
+          properties: {{}}
+          additionalProperties: true
+        visible_to:
+          - "public"
+        runnable_by:
+          - "all_authenticated_users"
+        subscription_id: "{subscription_id}"
+        {ansible_playbook_auth_params_flows}
+        state: present
+      register: second_run
+
+    - name: Verify idempotency
+      assert:
+        that:
+          - not second_run.changed
+          - second_run.flow_id == first_run.flow_id
+        fail_msg: "Flow module not idempotent with inline definition!"
+
+    - name: Cleanup test flow
+      m1yag1.globus.globus_flows:
+        title: "ansible-inline-idempotency-test"
+        flow_id: "{{{{ first_run.flow_id }}}}"
+        {ansible_playbook_auth_params_flows}
+        state: absent
+"""
+
+    playbook_path = create_playbook(playbook_content)
+    result = run_playbook(playbook_path)
+
+    assert result.returncode == 0, f"Playbook failed: {result.stderr}"
+
+
 def test_check_mode(ansible_playbook_auth_params, create_playbook, run_playbook):
     """Test check mode functionality."""
     playbook_content = f"""

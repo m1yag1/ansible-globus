@@ -258,6 +258,67 @@ def create_flow(api, params):
         )
 
 
+def _normalize_for_comparison(value):
+    """Normalize a value for comparison (sort lists, handle None vs empty)."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        # Sort lists for order-independent comparison
+        # Handle lists of dicts by converting to sorted tuples
+        try:
+            return sorted(value)
+        except TypeError:
+            # Lists contain unhashable types (dicts), compare as-is
+            return value
+    return value
+
+
+def _dicts_equal(dict1, dict2, ignore_extra_keys=False):
+    """Compare two dicts, optionally ignoring extra keys in dict2.
+
+    Args:
+        dict1: The expected/desired dict (from user params)
+        dict2: The actual dict (from API response)
+        ignore_extra_keys: If True, only check that dict1's keys match in dict2
+    """
+    if dict1 is None and dict2 is None:
+        return True
+    if dict1 is None or dict2 is None:
+        return False
+    if not isinstance(dict1, dict) or not isinstance(dict2, dict):
+        return dict1 == dict2
+
+    keys_to_check = set(dict1.keys())
+
+    for key in keys_to_check:
+        if key not in dict2:
+            return False
+        val1 = dict1[key]
+        val2 = dict2[key]
+
+        if isinstance(val1, dict):
+            if not _dicts_equal(val1, val2, ignore_extra_keys):
+                return False
+        elif isinstance(val1, list) and isinstance(val2, list):
+            # For lists of dicts, compare recursively
+            if len(val1) != len(val2):
+                return False
+            for item1, item2 in zip(val1, val2, strict=True):
+                if isinstance(item1, dict):
+                    if not _dicts_equal(item1, item2, ignore_extra_keys):
+                        return False
+                elif item1 != item2:
+                    return False
+        elif val1 != val2:
+            return False
+
+    # If not ignoring extra keys, check dict2 doesn't have extra keys
+    if not ignore_extra_keys and set(dict2.keys()) != keys_to_check:
+        return False
+
+    return True
+
+
 def update_flow(api, flow_id, params, existing_flow=None):
     """Update an existing flow using SDK (only if values changed)."""
     try:
@@ -274,28 +335,47 @@ def update_flow(api, flow_id, params, existing_flow=None):
             "administered_by": "flow_administrators",
         }
 
+        # Fields that should use order-independent list comparison
+        list_fields = {"visible_to", "runnable_by", "administered_by", "keywords"}
+
         for module_field, api_field in field_mapping.items():
             new_val = params.get(module_field)
             if new_val is not None:
                 # Compare with existing value if available
                 if existing_flow:
                     existing_val = existing_flow.get(api_field)
-                    if new_val != existing_val:
+                    # Use order-independent comparison for list fields
+                    if module_field in list_fields:
+                        if _normalize_for_comparison(
+                            new_val
+                        ) != _normalize_for_comparison(existing_val):
+                            update_kwargs[api_field] = new_val
+                    elif new_val != existing_val:
                         update_kwargs[api_field] = new_val
                 else:
                     update_kwargs[api_field] = new_val
 
-        # Definition updates - compare if existing
+        # Definition updates - use semantic comparison that ignores extra API-added fields
         if params.get("definition") is not None:
             if existing_flow:
-                if params["definition"] != existing_flow.get("definition"):
+                # Compare only the keys we specified; API may add extra fields
+                if not _dicts_equal(
+                    params["definition"],
+                    existing_flow.get("definition"),
+                    ignore_extra_keys=True,
+                ):
                     update_kwargs["definition"] = params["definition"]
             else:
                 update_kwargs["definition"] = params["definition"]
 
+        # Input schema comparison - also use semantic comparison
         if params.get("input_schema") is not None:
             if existing_flow:
-                if params["input_schema"] != existing_flow.get("input_schema"):
+                if not _dicts_equal(
+                    params["input_schema"],
+                    existing_flow.get("input_schema"),
+                    ignore_extra_keys=True,
+                ):
                     update_kwargs["input_schema"] = params["input_schema"]
             else:
                 update_kwargs["input_schema"] = params["input_schema"]

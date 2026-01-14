@@ -313,10 +313,7 @@ def _dicts_equal(dict1, dict2, ignore_extra_keys=False):
             return False
 
     # If not ignoring extra keys, check dict2 doesn't have extra keys
-    if not ignore_extra_keys and set(dict2.keys()) != keys_to_check:
-        return False
-
-    return True
+    return ignore_extra_keys or set(dict2.keys()) == keys_to_check
 
 
 def update_flow(api, flow_id, params, existing_flow=None):

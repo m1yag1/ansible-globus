@@ -240,13 +240,6 @@ def check_endpoint_configured(module):
     rc, stdout, stderr = module.run_command(
         ["globus-connect-server", "endpoint", "show"], check_rc=False
     )
-    # Debug: Log the actual error for troubleshooting
-    if rc != 0:
-        module.warn(
-            f"check_endpoint_configured failed: rc={rc}, "
-            f"stderr={stderr[:200] if stderr else 'empty'}, "
-            f"stdout={stdout[:200] if stdout else 'empty'}"
-        )
     if rc == 0:
         return True, stdout if stdout else ""
     return False, None

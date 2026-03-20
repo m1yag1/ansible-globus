@@ -65,7 +65,13 @@ options:
         required: false
         type: str
     subscription_id:
-        description: GCS subscription ID (endpoint only)
+        description: |
+            GCS subscription ID (endpoint only).
+            Note: If setting subscription_id during initial endpoint setup,
+            the endpoint must be deployed (node setup completed) first.
+            If the endpoint is not yet deployed, a warning will be shown
+            but the task will not fail. Set subscription_id after node setup
+            for best results.
         required: false
         type: str
     owner:

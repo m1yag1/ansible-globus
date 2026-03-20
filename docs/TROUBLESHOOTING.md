@@ -195,6 +195,32 @@ sudo systemctl status globus-connect-server
   until: endpoint_result.changed == false
 ```
 
+**Problem**: "Endpoint setup completed but endpoint information could not be retrieved"
+```yaml
+# This error occurred in versions prior to the fix for issue #11
+# Solution: Upgrade to the latest version of the collection
+
+# If you must use an older version, ensure node setup completes
+# before setting subscription_id
+- name: Setup endpoint without subscription_id
+  m1yag1.globus.globus_gcs:
+    resource_type: endpoint
+    display_name: "My Endpoint"
+    state: present
+
+- name: Complete node setup
+  m1yag1.globus.globus_gcs:
+    resource_type: node
+    state: present
+
+- name: Set subscription_id after deployment
+  m1yag1.globus.globus_gcs:
+    resource_type: endpoint
+    display_name: "My Endpoint"
+    subscription_id: "{{ my_subscription_id }}"
+    state: present
+```
+
 #### Collection Management
 
 **Problem**: Collection path permissions

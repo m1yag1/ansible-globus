@@ -1,5 +1,11 @@
 # Ansible Globus Collection
 
+
+> 🚧 **Under Construction** 🚧
+>
+>This project is currently in beta. While I have done my best to functionally test everything, you may encounter issues or missing features. If you are using this collection, feel free to reach out with any problems or feedback by contacting [mike.a@globus.org](mailto:mike.a@globus.org). I will do my best to communicate any upcoming changes, and as always, make sure to pin your version of ansible-globus.
+
+
 **[Read the full documentation](https://ansible-globus.readthedocs.io)**
 
 - [Getting Started](https://ansible-globus.readthedocs.io/en/latest/getting-started/)

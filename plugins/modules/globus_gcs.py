@@ -305,11 +305,12 @@ def setup_endpoint(module, params):
         )
 
     # Set subscription ID if provided
-    # This requires GCS_CLI_ENDPOINT_ID to be set, so we get it first
+    # Note: This requires the endpoint to be deployed (node setup complete) before it can work
     subscription_id = params.get("subscription_id")
     if subscription_id:
-        # Get the endpoint ID from the configuration file
-        endpoint_id = get_endpoint_id(module)
+        # Get the endpoint ID from deployment-key.json created by endpoint setup
+        endpoint_info = get_endpoint_from_deployment_key(module)
+        endpoint_id = endpoint_info.get("endpoint_id")
         if not endpoint_id:
             module.fail_json(msg="Failed to get endpoint ID after setup")
 
@@ -324,31 +325,41 @@ def setup_endpoint(module, params):
         ]
         rc, sub_stdout, sub_stderr = module.run_command(sub_cmd, check_rc=False)
         if rc != 0:
-            module.fail_json(
-                msg=f"Failed to set subscription ID: {sub_stderr}",
-                rc=rc,
-                stdout=sub_stdout,
-                stderr=sub_stderr,
-            )
+            # Check if this is a DNS resolution error (endpoint not deployed yet)
+            if "Error resolving" in sub_stderr or "Error contacting" in sub_stderr:
+                module.warn(
+                    f"Could not set subscription ID yet - endpoint must be deployed first. "
+                    f"Run 'globus-connect-server node setup' first, then set subscription_id again. "
+                    f"Endpoint ID: {endpoint_id}"
+                )
+            else:
+                module.fail_json(
+                    msg=f"Failed to set subscription ID: {sub_stderr}",
+                    rc=rc,
+                    stdout=sub_stdout,
+                    stderr=sub_stderr,
+                )
 
     return True, stdout
 
 
 def get_endpoint_from_deployment_key(module):
-    """Get endpoint ID from deployment-key.json file created by endpoint setup.
+    """Get endpoint ID from deployment-key.json or info.json.
 
-    The endpoint setup command creates a deployment-key.json file containing:
+    Tries multiple sources in order of preference:
+    1. deployment-key.json - created by endpoint setup, contains:
         {
             "client_id": "<endpoint_id>",
             "secret": "...",
             "node_key": {...}
         }
+    2. info.json - created by node setup, contains endpoint_id directly
 
     Args:
         module: AnsibleModule instance with params including optional deployment_key_path
 
     Returns:
-        dict with endpoint_id, or empty dict if file not found/invalid
+        dict with endpoint_id, or empty dict if not found
     """
     import json
     import os
@@ -395,6 +406,19 @@ def get_endpoint_from_deployment_key(module):
                 f"Found deployment-key.json at {path} but couldn't read it: {e}"
             )
             continue
+
+    # Fallback: try info.json (created after node setup)
+    try:
+        rc, stdout, stderr = module.run_command(
+            ["sudo", "cat", "/var/lib/globus-connect-server/info.json"],
+            check_rc=False,
+        )
+        if rc == 0 and stdout:
+            info = json.loads(stdout)
+            if isinstance(info, dict) and "endpoint_id" in info:
+                return {"endpoint_id": info["endpoint_id"]}
+    except (json.JSONDecodeError, Exception):
+        pass
 
     return {}
 
@@ -1158,7 +1182,8 @@ def main():
     # For storage gateway, collection, and role operations, we need the endpoint ID
     # Get it from the GCS configuration and set it as an environment variable
     if resource_type in ["storage_gateway", "collection", "role"]:
-        endpoint_id = get_endpoint_id(module)
+        endpoint_info = get_endpoint_from_deployment_key(module)
+        endpoint_id = endpoint_info.get("endpoint_id")
         if endpoint_id:
             os.environ["GCS_CLI_ENDPOINT_ID"] = endpoint_id
         elif resource_type != "endpoint":

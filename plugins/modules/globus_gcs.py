@@ -959,6 +959,10 @@ def create_role(module, collection_id, principal, role):
         "json",
     ]
 
+    # Add --provision flag if force is enabled (auto-provision identities)
+    if module.params.get("force", False):
+        cmd.append("--provision")
+
     rc, stdout, stderr = module.run_command(cmd, check_rc=False)
 
     # Extract JSON from stdout (skip non-JSON lines from globus-env.sh)

@@ -72,6 +72,10 @@ options:
         description: Endpoint owner identity (endpoint only)
         required: false
         type: str
+    deployment_key_path:
+        description: Path to deployment-key.json file (endpoint only)
+        required: false
+        type: str
     # Storage gateway options
     storage_type:
         description: Type of storage gateway
@@ -236,6 +240,13 @@ def check_endpoint_configured(module):
     rc, stdout, stderr = module.run_command(
         ["globus-connect-server", "endpoint", "show"], check_rc=False
     )
+    # Debug: Log the actual error for troubleshooting
+    if rc != 0:
+        module.warn(
+            f"check_endpoint_configured failed: rc={rc}, "
+            f"stderr={stderr[:200] if stderr else 'empty'}, "
+            f"stdout={stdout[:200] if stdout else 'empty'}"
+        )
     if rc == 0:
         return True, stdout if stdout else ""
     return False, None
@@ -328,6 +339,71 @@ def setup_endpoint(module, params):
             )
 
     return True, stdout
+
+
+def get_endpoint_from_deployment_key(module):
+    """Get endpoint ID from deployment-key.json file created by endpoint setup.
+
+    The endpoint setup command creates a deployment-key.json file containing:
+        {
+            "client_id": "<endpoint_id>",
+            "secret": "...",
+            "node_key": {...}
+        }
+
+    Args:
+        module: AnsibleModule instance with params including optional deployment_key_path
+
+    Returns:
+        dict with endpoint_id, or empty dict if file not found/invalid
+    """
+    import json
+    import os
+
+    # If user specified a path, use that first
+    deployment_key_path = module.params.get("deployment_key_path")
+
+    if deployment_key_path:
+        search_paths = [deployment_key_path]
+    else:
+        # Get current working directory
+        cwd = os.getcwd()
+
+        # Try common locations where the file might be created
+        search_paths = [
+            os.path.join(cwd, "deployment-key.json"),  # Current working directory
+            "deployment-key.json",  # Relative path
+            "/root/deployment-key.json",
+            os.path.expanduser("~/deployment-key.json"),
+        ]
+
+        # When running with become/sudo, check the original user's home directory
+        sudo_user = os.environ.get("SUDO_USER")
+        if sudo_user:
+            search_paths.append(os.path.expanduser(f"~{sudo_user}/deployment-key.json"))
+
+        # Also check common user home directories
+        for user in ["ec2-user", "ubuntu", "centos", "admin"]:
+            user_path = f"/home/{user}/deployment-key.json"
+            if user_path not in search_paths:
+                search_paths.append(user_path)
+
+    for path in search_paths:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+                if "client_id" in data:
+                    return {"endpoint_id": data["client_id"]}
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError, PermissionError) as e:
+            # File exists but can't be read or parsed - this is worth noting
+            module.warn(
+                f"Found deployment-key.json at {path} but couldn't read it: {e}"
+            )
+            continue
+
+    return {}
 
 
 def parse_endpoint_info(output):
@@ -1010,6 +1086,7 @@ def main():
             "project_id": {"type": "str"},
             "subscription_id": {"type": "str"},
             "owner": {"type": "str"},
+            "deployment_key_path": {"type": "str"},
             # Storage gateway
             "storage_type": {
                 "type": "str",
@@ -1127,17 +1204,26 @@ def main():
                 if module.check_mode:
                     module.exit_json(changed=True, msg="Would setup endpoint")
 
-                setup_endpoint(module, module.params)
-                is_configured_after, endpoint_info_raw = check_endpoint_configured(
-                    module
-                )
+                # Setup endpoint
+                _, setup_stdout = setup_endpoint(module, module.params)
 
-                if not is_configured_after or not endpoint_info_raw:
-                    module.fail_json(
-                        msg="Endpoint setup completed but endpoint information could not be retrieved"
+                # Get endpoint ID from deployment-key.json created by setup command
+                # The info.json file is created by node setup, not endpoint setup
+                endpoint_info = get_endpoint_from_deployment_key(module)
+
+                if not endpoint_info.get("endpoint_id"):
+                    # Fallback to check_endpoint_configured if deployment key not found
+                    is_configured_after, endpoint_info_raw = check_endpoint_configured(
+                        module
                     )
 
-                endpoint_info = parse_endpoint_info(endpoint_info_raw)
+                    if not is_configured_after or not endpoint_info_raw:
+                        module.fail_json(
+                            msg="Endpoint setup completed but endpoint information could not be retrieved. "
+                            "Searched for deployment-key.json but file not found or not readable."
+                        )
+
+                    endpoint_info = parse_endpoint_info(endpoint_info_raw)
 
                 module.exit_json(
                     changed=True,

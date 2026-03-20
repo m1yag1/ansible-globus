@@ -284,3 +284,8 @@ Icon
 # Project-specific
 conftest.py  # This is in root, might be a mistake - commented out for safety
 # conftest.py
+
+# Collection build artifacts
+FILES.json
+MANIFEST.json
+*.tar.gz

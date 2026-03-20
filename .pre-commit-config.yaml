@@ -51,7 +51,7 @@ repos:
         stages: [commit]
       - id: pytest-check
         name: pytest-check
-        entry: pytest
+        entry: .venv/bin/pytest
         language: system
         pass_filenames: false
         always_run: true

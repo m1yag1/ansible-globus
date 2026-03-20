@@ -65,11 +65,21 @@ options:
         required: false
         type: str
     subscription_id:
-        description: GCS subscription ID (endpoint only)
+        description: |
+            GCS subscription ID (endpoint only).
+            Note: If setting subscription_id during initial endpoint setup,
+            the endpoint must be deployed (node setup completed) first.
+            If the endpoint is not yet deployed, a warning will be shown
+            but the task will not fail. Set subscription_id after node setup
+            for best results.
         required: false
         type: str
     owner:
         description: Endpoint owner identity (endpoint only)
+        required: false
+        type: str
+    deployment_key_path:
+        description: Path to deployment-key.json file (endpoint only)
         required: false
         type: str
     # Storage gateway options
@@ -301,11 +311,12 @@ def setup_endpoint(module, params):
         )
 
     # Set subscription ID if provided
-    # This requires GCS_CLI_ENDPOINT_ID to be set, so we get it first
+    # Note: This requires the endpoint to be deployed (node setup complete) before it can work
     subscription_id = params.get("subscription_id")
     if subscription_id:
-        # Get the endpoint ID from the configuration file
-        endpoint_id = get_endpoint_id(module)
+        # Get the endpoint ID from deployment-key.json created by endpoint setup
+        endpoint_info = get_endpoint_from_deployment_key(module)
+        endpoint_id = endpoint_info.get("endpoint_id")
         if not endpoint_id:
             module.fail_json(msg="Failed to get endpoint ID after setup")
 
@@ -320,14 +331,102 @@ def setup_endpoint(module, params):
         ]
         rc, sub_stdout, sub_stderr = module.run_command(sub_cmd, check_rc=False)
         if rc != 0:
-            module.fail_json(
-                msg=f"Failed to set subscription ID: {sub_stderr}",
-                rc=rc,
-                stdout=sub_stdout,
-                stderr=sub_stderr,
-            )
+            # Check if this is a DNS resolution error (endpoint not deployed yet)
+            if "Error resolving" in sub_stderr or "Error contacting" in sub_stderr:
+                module.warn(
+                    f"Could not set subscription ID yet - endpoint must be deployed first. "
+                    f"Run 'globus-connect-server node setup' first, then set subscription_id again. "
+                    f"Endpoint ID: {endpoint_id}"
+                )
+            else:
+                module.fail_json(
+                    msg=f"Failed to set subscription ID: {sub_stderr}",
+                    rc=rc,
+                    stdout=sub_stdout,
+                    stderr=sub_stderr,
+                )
 
     return True, stdout
+
+
+def get_endpoint_from_deployment_key(module):
+    """Get endpoint ID from deployment-key.json or info.json.
+
+    Tries multiple sources in order of preference:
+    1. deployment-key.json - created by endpoint setup, contains:
+        {
+            "client_id": "<endpoint_id>",
+            "secret": "...",
+            "node_key": {...}
+        }
+    2. info.json - created by node setup, contains endpoint_id directly
+
+    Args:
+        module: AnsibleModule instance with params including optional deployment_key_path
+
+    Returns:
+        dict with endpoint_id, or empty dict if not found
+    """
+    import json
+    import os
+
+    # If user specified a path, use that first
+    deployment_key_path = module.params.get("deployment_key_path")
+
+    if deployment_key_path:
+        search_paths = [deployment_key_path]
+    else:
+        # Get current working directory
+        cwd = os.getcwd()
+
+        # Try common locations where the file might be created
+        search_paths = [
+            os.path.join(cwd, "deployment-key.json"),  # Current working directory
+            "deployment-key.json",  # Relative path
+            "/root/deployment-key.json",
+            os.path.expanduser("~/deployment-key.json"),
+        ]
+
+        # When running with become/sudo, check the original user's home directory
+        sudo_user = os.environ.get("SUDO_USER")
+        if sudo_user:
+            search_paths.append(os.path.expanduser(f"~{sudo_user}/deployment-key.json"))
+
+        # Also check common user home directories
+        for user in ["ec2-user", "ubuntu", "centos", "admin"]:
+            user_path = f"/home/{user}/deployment-key.json"
+            if user_path not in search_paths:
+                search_paths.append(user_path)
+
+    for path in search_paths:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+                if "client_id" in data:
+                    return {"endpoint_id": data["client_id"]}
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError, PermissionError) as e:
+            # File exists but can't be read or parsed - this is worth noting
+            module.warn(
+                f"Found deployment-key.json at {path} but couldn't read it: {e}"
+            )
+            continue
+
+    # Fallback: try info.json (created after node setup)
+    try:
+        rc, stdout, stderr = module.run_command(
+            ["sudo", "cat", "/var/lib/globus-connect-server/info.json"],
+            check_rc=False,
+        )
+        if rc == 0 and stdout:
+            info = json.loads(stdout)
+            if isinstance(info, dict) and "endpoint_id" in info:
+                return {"endpoint_id": info["endpoint_id"]}
+    except (json.JSONDecodeError, Exception):
+        pass
+
+    return {}
 
 
 def parse_endpoint_info(output):
@@ -890,6 +989,10 @@ def create_role(module, collection_id, principal, role):
         "json",
     ]
 
+    # Add --provision flag if force is enabled (auto-provision identities)
+    if module.params.get("force", False):
+        cmd.append("--provision")
+
     rc, stdout, stderr = module.run_command(cmd, check_rc=False)
 
     # Extract JSON from stdout (skip non-JSON lines from globus-env.sh)
@@ -1010,6 +1113,7 @@ def main():
             "project_id": {"type": "str"},
             "subscription_id": {"type": "str"},
             "owner": {"type": "str"},
+            "deployment_key_path": {"type": "str"},
             # Storage gateway
             "storage_type": {
                 "type": "str",
@@ -1084,7 +1188,8 @@ def main():
     # For storage gateway, collection, and role operations, we need the endpoint ID
     # Get it from the GCS configuration and set it as an environment variable
     if resource_type in ["storage_gateway", "collection", "role"]:
-        endpoint_id = get_endpoint_id(module)
+        endpoint_info = get_endpoint_from_deployment_key(module)
+        endpoint_id = endpoint_info.get("endpoint_id")
         if endpoint_id:
             os.environ["GCS_CLI_ENDPOINT_ID"] = endpoint_id
         elif resource_type != "endpoint":
@@ -1127,17 +1232,26 @@ def main():
                 if module.check_mode:
                     module.exit_json(changed=True, msg="Would setup endpoint")
 
-                setup_endpoint(module, module.params)
-                is_configured_after, endpoint_info_raw = check_endpoint_configured(
-                    module
-                )
+                # Setup endpoint
+                _, setup_stdout = setup_endpoint(module, module.params)
 
-                if not is_configured_after or not endpoint_info_raw:
-                    module.fail_json(
-                        msg="Endpoint setup completed but endpoint information could not be retrieved"
+                # Get endpoint ID from deployment-key.json created by setup command
+                # The info.json file is created by node setup, not endpoint setup
+                endpoint_info = get_endpoint_from_deployment_key(module)
+
+                if not endpoint_info.get("endpoint_id"):
+                    # Fallback to check_endpoint_configured if deployment key not found
+                    is_configured_after, endpoint_info_raw = check_endpoint_configured(
+                        module
                     )
 
-                endpoint_info = parse_endpoint_info(endpoint_info_raw)
+                    if not is_configured_after or not endpoint_info_raw:
+                        module.fail_json(
+                            msg="Endpoint setup completed but endpoint information could not be retrieved. "
+                            "Searched for deployment-key.json but file not found or not readable."
+                        )
+
+                    endpoint_info = parse_endpoint_info(endpoint_info_raw)
 
                 module.exit_json(
                     changed=True,

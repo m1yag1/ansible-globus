@@ -1,0 +1,318 @@
+---
+# Example: Setting Up a Complete Globus Connect Server v5.4 Endpoint
+#
+# This playbook demonstrates the complete workflow for deploying a
+# Globus Connect Server endpoint with a mapped collection:
+#   1. Create and configure the endpoint (with subscription_id)
+#   2. Deploy the node (GridFTP/HTTPS servers)
+#   3. Create a POSIX storage gateway with identity mapping
+#   4. Create a mapped collection
+#   5. Assign administrator roles
+#
+# Prerequisites:
+#   - Globus Connect Server v5.4 installed on target host
+#     (or uncomment the installation tasks in this playbook)
+#   - A Globus subscription ID and project ID
+#   - A confidential client application configured for automated deployment:
+#       1. Create at https://app.globus.org/settings/developers
+#       2. Add the client UUID as an admin to your project
+#       3. Add the client UUID as a member of your subscription group
+#       4. See: https://docs.globus.org/globus-connect-server/v5/automated-deployment/
+#   - Set GLOBUS_CLIENT_ID and GLOBUS_CLIENT_SECRET environment variables
+#
+# Important Notes:
+#   - For fully automated deployment, your client ID must be added as a member
+#     to your subscription group (see automated deployment docs above)
+#   - The subscription_id is set after node setup to avoid timing issues
+#   - Identity mapping matches Globus identities to local system users
+#   - The force parameter auto-provisions identities when assigning roles
+#
+# Run with:
+#   ansible-playbook -i inventory examples/globus_gcs_endpoint.yml \
+#     -e endpoint_name="My Research Endpoint" \
+#     -e globus_subscription_id="your-subscription-id" \
+#     -e globus_project_id="your-project-id"
+
+- name: Deploy Globus Connect Server Endpoint
+  hosts: gcs_servers
+  gather_facts: true
+
+  # Customize these variables for your environment
+  vars:
+    # Required: Set these via -e or in your inventory
+    endpoint_name: "Research Data Endpoint"
+    globus_subscription_id: ""  # Your subscription ID
+    globus_project_id: ""       # Your project ID
+
+    # Collection configuration
+    collection_name: "{{ endpoint_name }} - Shared Data"
+    storage_path: /data/globus
+    collection_public: false
+
+    # Identity mapping - map Globus identities to local users
+    # This example maps a specific user, the client ID, and provides a catch-all
+    # See: https://docs.globus.org/globus-connect-server/v5/identity-mapping/
+    identity_mappings:
+      - source: "{username}"
+        match: "^researcher@university\\.edu$"
+        output: "researcher"
+        literal: true
+      - source: "{id}"
+        match: "^{{ lookup('env', 'GLOBUS_CLIENT_ID') }}$"
+        output: "researcher"  # Map client ID to same user
+        literal: true
+      - source: "{username}"
+        match: "(.*)"
+        output: "{0}"  # Map username as-is
+
+    # Administrator to grant full access
+    collection_admin: "admin@university.edu"
+
+    # Contact info for the endpoint
+    endpoint_contact_email: "support@university.edu"
+    endpoint_organization: "University Research Computing"
+
+  # Set environment variables for all GCS tasks
+  # Note: The globus_gcs module uses environment variables for authentication,
+  # not module parameters like other modules in the collection
+  environment:
+    GLOBUS_SDK_ENVIRONMENT: "{{ lookup('env', 'GLOBUS_SDK_ENVIRONMENT') | default('production') }}"
+    GCS_CLI_CLIENT_ID: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+    GCS_CLI_CLIENT_SECRET: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+
+  tasks:
+    # =========================================================================
+    # Step 0 (Optional): Install Globus Connect Server
+    # =========================================================================
+    # If GCS is not already installed on the target host, uncomment these tasks
+    # to install it. This ensures the gcs_manager database is properly initialized.
+
+    # - name: Install GCS repository (RHEL/CentOS/Rocky)
+    #   ansible.builtin.yum:
+    #     name: https://downloads.globus.org/globus-connect-server/stable/installers/repo/rpm/globus-connect-server-repo-latest.noarch.rpm
+    #     state: present
+    #     disable_gpg_check: true
+    #   become: true
+    #   when: ansible_os_family == "RedHat"
+
+    # - name: Install GCS repository (Ubuntu/Debian)
+    #   ansible.builtin.apt:
+    #     deb: https://downloads.globus.org/globus-connect-server/stable/installers/repo/deb/globus-connect-server-repo_latest_all.deb
+    #     state: present
+    #   become: true
+    #   when: ansible_os_family == "Debian"
+
+    # - name: Install Globus Connect Server v5.4
+    #   ansible.builtin.package:
+    #     name: globus-connect-server54
+    #     state: present
+    #   become: true
+
+    # - name: Verify GCS manager database exists
+    #   ansible.builtin.stat:
+    #     path: /var/lib/globus-connect-server/gcs-manager/gcs54.db
+    #   register: gcs_db
+    #   become: true
+
+    # - name: Ensure GCS installation completed successfully
+    #   ansible.builtin.assert:
+    #     that:
+    #       - gcs_db.stat.exists
+    #     fail_msg: "GCS manager database not found. Try reinstalling: sudo yum reinstall globus-connect-server54"
+    #     success_msg: "GCS installation verified"
+    #   become: true
+
+    # =========================================================================
+    # Step 1: Create the GCS endpoint
+    # =========================================================================
+    # This creates the endpoint registration in Globus. The endpoint won't
+    # be functional until node setup completes in the next step.
+    #
+    # Note: Setting subscription_id here will show a warning if the endpoint
+    # is not yet deployed, but will not fail. We set it again after node
+    # setup to ensure it's properly configured.
+
+    - name: Create GCS endpoint
+      m1yag1.globus.globus_gcs:
+        resource_type: endpoint
+        state: present
+        display_name: "{{ endpoint_name }}"
+        organization: "{{ endpoint_organization }}"
+        contact_email: "{{ endpoint_contact_email }}"
+        project_id: "{{ globus_project_id }}"
+        subscription_id: "{{ globus_subscription_id }}"
+        owner: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}@clients.auth.globus.org"
+      register: endpoint_result
+
+    - name: Display endpoint information
+      ansible.builtin.debug:
+        msg:
+          - "Endpoint {{ 'created' if endpoint_result.changed else 'already exists' }}"
+          - "Endpoint ID: {{ endpoint_result.endpoint_id }}"
+
+    - name: Ensure GCS state directory exists
+      ansible.builtin.file:
+        path: /var/lib/globus-connect-server
+        state: directory
+        mode: '0755'
+      become: true
+
+    # =========================================================================
+    # Step 2: Deploy the node
+    # =========================================================================
+    # This installs and configures the data transfer services (GridFTP/HTTPS)
+    # and registers them with the endpoint. After this completes, the endpoint
+    # will be functional and accessible.
+    #
+    # IMPORTANT: This is the ONLY step that requires root privileges to start
+    # the Apache server and configure system services.
+
+    - name: Setup GCS node
+      m1yag1.globus.globus_gcs:
+        resource_type: node
+        state: present
+      environment:
+        GLOBUS_SDK_ENVIRONMENT: "{{ lookup('env', 'GLOBUS_SDK_ENVIRONMENT') | default('production') }}"
+        GCS_CLI_CLIENT_ID: "{{ lookup('env', 'GLOBUS_CLIENT_ID') }}"
+        GCS_CLI_CLIENT_SECRET: "{{ lookup('env', 'GLOBUS_CLIENT_SECRET') }}"
+      become: true  # Required: Starts Apache and configures system services
+      register: node_result
+
+    - name: Display node deployment status
+      ansible.builtin.debug:
+        msg: "Node {{ 'deployed' if node_result.changed else 'already configured' }}"
+
+    # =========================================================================
+    # Step 3: Prepare local storage
+    # =========================================================================
+    # Create the directory that will be shared via Globus and ensure it has
+    # the correct ownership and permissions.
+
+    - name: Create storage directory
+      ansible.builtin.file:
+        path: "{{ storage_path }}"
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Create a test file in storage
+      ansible.builtin.copy:
+        content: |
+          Welcome to {{ endpoint_name }}!
+          This directory is shared via Globus.
+        dest: "{{ storage_path }}/README.txt"
+        mode: '0644'
+      become: true
+
+    # =========================================================================
+    # Step 4: Create POSIX storage gateway with identity mapping
+    # =========================================================================
+    # The storage gateway defines how to access the underlying storage and
+    # how to map Globus identities to local system users. Identity mapping
+    # is critical for correct file permissions.
+    #
+    # In this example:
+    #   - researcher@university.edu maps to the local 'researcher' user
+    #   - All other users map to their username (e.g., jsmith@domain.org -> jsmith)
+
+    - name: Create storage gateway
+      m1yag1.globus.globus_gcs:
+        resource_type: storage_gateway
+        state: present
+        display_name: "POSIX Storage Gateway"
+        storage_type: posix
+        root_path: "{{ storage_path }}"
+        identity_mapping: "{{ identity_mappings }}"
+      register: storage_result
+
+    - name: Display storage gateway information
+      ansible.builtin.debug:
+        msg:
+          - "Storage gateway {{ 'created' if storage_result.changed else 'already exists' }}"
+          - "Storage Gateway ID: {{ storage_result.storage_gateway_id }}"
+
+    # =========================================================================
+    # Step 5: Create a mapped collection
+    # =========================================================================
+    # A collection is the user-facing resource that appears in the Globus
+    # web app and can be used for transfers. It maps to a path within the
+    # storage gateway.
+
+    - name: Create collection
+      m1yag1.globus.globus_gcs:
+        resource_type: collection
+        state: present
+        display_name: "{{ collection_name }}"
+        storage_gateway_id: "{{ storage_result.storage_gateway_id }}"
+        collection_base_path: "/"
+        public: "{{ collection_public }}"
+      register: collection_result
+
+    - name: Display collection information
+      ansible.builtin.debug:
+        msg:
+          - "Collection {{ 'created' if collection_result.changed else 'already exists' }}"
+          - "Collection ID: {{ collection_result.collection_id }}"
+
+    # =========================================================================
+    # Step 6: Assign administrator role
+    # =========================================================================
+    # Grant administrator access to a Globus identity. The force parameter
+    # automatically provisions the identity if it doesn't exist yet.
+    #
+    # Note: For production, consider assigning roles to a Globus group rather
+    # than individual users for easier management.
+
+    - name: Assign administrator role on collection
+      m1yag1.globus.globus_gcs:
+        resource_type: role
+        state: present
+        collection_id: "{{ collection_result.collection_id }}"
+        principal: "{{ collection_admin }}"
+        role: administrator
+        force: true  # Auto-provision identity if needed
+      register: role_result
+
+    - name: Display role assignment status
+      ansible.builtin.debug:
+        msg: "Administrator role {{ 'assigned' if role_result.changed else 'already assigned' }} to {{ collection_admin }}"
+
+    # =========================================================================
+    # Deployment complete
+    # =========================================================================
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Deployment Complete!"
+          - "=========================================="
+          - ""
+          - "Endpoint: {{ endpoint_name }}"
+          - "Endpoint ID: {{ endpoint_result.endpoint_id }}"
+          - ""
+          - "Collection: {{ collection_name }}"
+          - "Collection ID: {{ collection_result.collection_id }}"
+          - ""
+          - "Administrator: {{ collection_admin }}"
+          - "Storage Path: {{ storage_path }}"
+          - ""
+          - "To access your collection, visit the Globus File Manager"
+          - "and search for the collection ID above, or use it in transfers."
+
+# =========================================================================
+# Troubleshooting
+# =========================================================================
+#
+# If you encounter "OperationalError: unable to open database file" during
+# node setup, the GCS manager database may be missing or corrupted.
+#
+# To fix:
+#   sudo yum reinstall -y globus-connect-server54    # RHEL/CentOS/Rocky
+#   sudo apt-get install --reinstall globus-connect-server54  # Ubuntu/Debian
+#
+# This will recreate /var/lib/globus-connect-server/gcs-manager/gcs54.db
+# and run the necessary database migrations.
+#
+# IMPORTANT: Never delete /var/lib/globus-connect-server/* as this will
+# remove critical state including the gcs_manager database.

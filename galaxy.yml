@@ -28,7 +28,7 @@ tags:
 dependencies: {}
 
 repository: https://github.com/m1yag1/ansible-globus
-documentation: https://github.com/m1yag1/ansible-globus/blob/main/README.md
+documentation: https://ansible-globus.readthedocs.io
 homepage: https://github.com/m1yag1/ansible-globus
 issues: https://github.com/m1yag1/ansible-globus/issues
 

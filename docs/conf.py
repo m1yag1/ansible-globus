@@ -23,6 +23,14 @@ highlight_language = "YAML+Jinja"
 html_theme = "sphinx_rtd_theme"
 html_show_sphinx = False
 
+html_theme_options = {
+    "display_github": True,
+    "github_user": "m1yag1",
+    "github_repo": "ansible-globus",
+    "github_version": "main",
+    "conf_py_path": "/docs/",
+}
+
 display_version = False
 
 html_use_smartypants = True

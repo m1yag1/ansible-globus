@@ -5,6 +5,29 @@ All notable changes to the Ansible Globus Collection will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-02
+
+### Added
+
+- **auth**: Add scopes parameter support for OAuth clients
+- **auth**: Auto-detect current user as admin when creating projects
+
+### Fixed
+
+- **auth**: Auto-detect auth method when not explicitly specified
+- **auth**: Fix CLI token namespace for GLOBUS_PROFILE environments
+- **auth**: Improve response parsing for globus-sdk v3 and v4+ compatibility
+- **auth**: Enhance client credential creation with better error messages
+- **auth**: Support multiple API error response formats
+
+### Changed
+
+- **auth**: Default auth_method now None (auto-detect) instead of "cli"
+
+### Documentation
+
+- **readme**: Add beta notice and contact information
+
 ## [0.5.2] - 2026-03-20
 
 ### Documentation

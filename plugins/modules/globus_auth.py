@@ -87,6 +87,11 @@ options:
         description: Pre-selected identity provider UUID (client only)
         required: false
         type: str
+    scopes:
+        description: List of scope strings the client is allowed to request (client only)
+        required: false
+        type: list
+        elements: str
     credential_output_file:
         description: Path to save client credentials JSON file (client only)
         required: false
@@ -333,11 +338,27 @@ def find_project_by_name(api, name):
     """Find a project by display name using SDK."""
     try:
         response = api.auth_client.get_projects()
-        projects = (
-            response.data.get("projects", [])
-            if hasattr(response, "data")
-            else response.get("projects", [])
-        )
+
+        # Handle different response formats from globus_sdk versions
+        if hasattr(response, "data"):
+            # v4+ with GlobusHTTPResponse wrapper
+            data = response.data
+            if isinstance(data, dict):
+                projects = data.get("projects", [])
+            elif isinstance(data, list):
+                # Direct list of projects
+                projects = data
+            else:
+                api.module.warn(f"Unexpected response.data type: {type(data)}")
+                projects = []
+        elif hasattr(response, "__iter__") and not isinstance(response, str | dict):
+            # v3 iterable response - convert to list
+            projects = list(response)
+        elif isinstance(response, dict):
+            projects = response.get("projects", [])
+        else:
+            api.module.warn(f"Unexpected response type: {type(response)}")
+            projects = []
 
         for project in projects:
             if project.get("display_name") == name:
@@ -368,13 +389,40 @@ def create_project(api, params):
         if params.get("description"):
             project_data["description"] = params["description"]
 
-        response = api.auth_client.create_project(
-            display_name=project_data["display_name"],
-            contact_email=project_data.get("contact_email"),
-            **{"admin_ids": params.get("admin_ids", [])}
-            if params.get("admin_ids")
-            else {},
-        )
+        # Globus Auth API requires at least one admin_id or admin_group_id
+        # If none specified, use the current user's identity
+        admin_ids = params.get("admin_ids") or []
+        admin_group_ids = params.get("admin_group_ids") or []
+
+        if not admin_ids and not admin_group_ids:
+            try:
+                # Try userinfo() first (simpler), fall back to oauth2_userinfo()
+                try:
+                    userinfo = api.auth_client.userinfo()
+                except AttributeError:
+                    userinfo = api.auth_client.oauth2_userinfo()
+
+                if hasattr(userinfo, "data"):
+                    current_user_id = userinfo.data.get("sub")
+                else:
+                    current_user_id = userinfo.get("sub")
+
+                if current_user_id:
+                    admin_ids = [current_user_id]
+            except Exception as e:
+                api.module.warn(f"Could not get current user identity: {e}")
+
+        # Build create_project kwargs - only include non-empty lists
+        create_kwargs = {
+            "display_name": project_data["display_name"],
+            "contact_email": project_data.get("contact_email"),
+        }
+        if admin_ids:
+            create_kwargs["admin_ids"] = admin_ids
+        if admin_group_ids:
+            create_kwargs["admin_group_ids"] = admin_group_ids
+
+        response = api.auth_client.create_project(**create_kwargs)
 
         project = response.data if hasattr(response, "data") else response
         project_id = project["project"]["id"]
@@ -392,37 +440,38 @@ def create_project(api, params):
         api.handle_api_error(e, "creating project")
 
 
-def update_project(api, project_id, params):
-    """Update an existing project using SDK."""
+def update_project(api, project_id, params, existing_project=None):
+    """Update an existing project using SDK.
+
+    NOTE: The Globus Auth API currently requires admin_ids or admin_group_ids
+    in every update request. Since updating core project settings (name,
+    contact_email, description) via CLI tokens often fails due to this
+    constraint, we skip those updates and only handle admin management.
+
+    Args:
+        api: GlobusSDKClient instance
+        project_id: ID of the project to update
+        params: Module parameters containing desired state
+        existing_project: Optional dict with current project state for comparison
+    """
     try:
         changed = False
-        update_data = {}
 
-        if params.get("name"):
-            update_data["display_name"] = params["name"]
+        # Get existing project state if not provided
+        if existing_project is None:
+            response = api.auth_client.get_project(project_id)
+            existing_project = response.data if hasattr(response, "data") else response
+            # Handle nested project structure
+            if isinstance(existing_project, dict) and "project" in existing_project:
+                existing_project = existing_project["project"]
 
-        if params.get("contact_email"):
-            update_data["contact_email"] = params["contact_email"]
+        # NOTE: We skip updating display_name, contact_email, and description
+        # because the Globus Auth API requires admin_ids/admin_group_ids in every
+        # update request, which causes issues with CLI-based authentication.
+        # These fields are set at creation time and can be updated via the
+        # Globus web interface if needed.
 
-        # SDK v3 doesn't support description in update_project
-        # Only add it if we're using SDK v4
-        if params.get("description"):
-            # Try to update with description (SDK v4)
-            # If it fails, update without it (SDK v3)
-            try:
-                update_with_desc = update_data.copy()
-                update_with_desc["description"] = params["description"]
-                api.auth_client.update_project(project_id, **update_with_desc)
-                changed = True
-                update_data = {}  # Clear to avoid duplicate update
-            except TypeError:
-                # SDK v3 doesn't support description parameter
-                pass
-
-        if update_data:
-            api.auth_client.update_project(project_id, **update_data)
-            changed = True
-
+        # Handle admin management (these use separate API calls)
         if params.get("admin_ids") is not None:
             for admin_id in params["admin_ids"]:
                 try:
@@ -476,11 +525,22 @@ def find_policy_by_name(api, project_id, name):
     try:
         # Use the auth client's get method to retrieve policies for a project
         response = api.auth_client.get(f"/v2/api/projects/{project_id}/policies")
-        policies = (
-            response.data.get("policies", [])
-            if hasattr(response, "data")
-            else response.get("policies", [])
-        )
+
+        # Handle different response formats
+        if hasattr(response, "data"):
+            data = response.data
+            if isinstance(data, dict):
+                policies = data.get("policies", [])
+            elif isinstance(data, list):
+                policies = data
+            else:
+                policies = []
+        elif hasattr(response, "__iter__") and not isinstance(response, str | dict):
+            policies = list(response)
+        elif isinstance(response, dict):
+            policies = response.get("policies", [])
+        else:
+            policies = []
 
         for policy in policies:
             if policy.get("display_name") == name:
@@ -590,11 +650,22 @@ def find_client_by_name(api, project_id, name):
             return None
 
         response = api.auth_client.get_project_clients(project_id)
-        clients = (
-            response.data.get("clients", [])
-            if hasattr(response, "data")
-            else response.get("clients", [])
-        )
+
+        # Handle different response formats
+        if hasattr(response, "data"):
+            data = response.data
+            if isinstance(data, dict):
+                clients = data.get("clients", [])
+            elif isinstance(data, list):
+                clients = data
+            else:
+                clients = []
+        elif hasattr(response, "__iter__") and not isinstance(response, str | dict):
+            clients = list(response)
+        elif isinstance(response, dict):
+            clients = response.get("clients", [])
+        else:
+            clients = []
 
         for client in clients:
             if client.get("name") == name:
@@ -654,6 +725,9 @@ def create_client(api, params):
         if params.get("preselect_idp"):
             client_data["preselect_idp"] = params["preselect_idp"]
 
+        if params.get("scopes"):
+            client_data["scopes"] = params["scopes"]
+
         # Create the client - SDK v3 uses **kwargs, SDK v4 uses data parameter
         try:
             # Try SDK v4 style first
@@ -676,17 +750,48 @@ def create_client(api, params):
             "hybrid_confidential_client_resource_server",
         ]:
             try:
+                # SDK v4+ requires a name parameter for credentials
+                cred_name = f"{params['name']}-credential"
                 cred_response = api.auth_client.create_client_credential(
-                    client["client"]["id"]
+                    client["client"]["id"],
+                    name=cred_name,
                 )
                 cred_data = (
                     cred_response.data
                     if hasattr(cred_response, "data")
                     else cred_response
                 )
-                client_secret = cred_data.get("secret")
+                client_secret = cred_data.get("credential", {}).get(
+                    "secret"
+                ) or cred_data.get("secret")
+            except TypeError:
+                # SDK v3 style - no name parameter
+                try:
+                    cred_response = api.auth_client.create_client_credential(
+                        client["client"]["id"]
+                    )
+                    cred_data = (
+                        cred_response.data
+                        if hasattr(cred_response, "data")
+                        else cred_response
+                    )
+                    client_secret = cred_data.get("credential", {}).get(
+                        "secret"
+                    ) or cred_data.get("secret")
+                except Exception as e:
+                    api.module.warn(f"Failed to create client credential: {e}")
             except Exception as e:
-                api.module.warn(f"Failed to create client credential: {e}")
+                error_str = str(e)
+                if "403" in error_str and (
+                    "30 minutes" in error_str or "admin privileges" in error_str
+                ):
+                    api.module.warn(
+                        "Client created but credential creation requires high-assurance auth. "
+                        "Run: globus session consent 'urn:globus:auth:scope:auth.globus.org:manage_projects' "
+                        "then re-run this playbook."
+                    )
+                else:
+                    api.module.warn(f"Failed to create client credential: {e}")
 
         # Format output according to Option 5
         result = {
@@ -745,6 +850,10 @@ def update_client(api, client_id, params):
                 ]
             if params.get("privacy_policy"):
                 update_data["links"]["privacy_policy"] = params["privacy_policy"]
+            changed = True
+
+        if params.get("scopes") is not None:
+            update_data["scopes"] = params["scopes"]
             changed = True
 
         if update_data:
@@ -811,6 +920,7 @@ def main():
         privacy_policy={"type": "str"},
         required_idp={"type": "str"},
         preselect_idp={"type": "str"},
+        scopes={"type": "list", "elements": "str"},
         credential_output_file={"type": "path"},
     )
 
@@ -848,7 +958,7 @@ def main():
                     module.exit_json(changed=False, resource_type="project", name=name)
 
                 resource_id = existing["id"]
-                changed = update_project(api, resource_id, module.params)
+                changed = update_project(api, resource_id, module.params, existing)
 
                 module.exit_json(
                     changed=changed,
@@ -1062,4 +1172,22 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    import traceback
+
+    try:
+        main()
+    except Exception as e:
+        # Write traceback to stderr so it shows in ansible output
+        sys.stderr.write(f"Module exception: {e}\n")
+        sys.stderr.write(traceback.format_exc())
+        sys.stderr.flush()
+        # Also try to output as JSON for ansible
+        import json
+
+        error_result = {
+            "failed": True,
+            "msg": f"Module exception: {e}\n{traceback.format_exc()}",
+        }
+        print(json.dumps(error_result))
+        sys.exit(1)

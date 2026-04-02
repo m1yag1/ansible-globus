@@ -69,7 +69,7 @@ def globus_argument_spec() -> dict[str, t.Any]:
         },
         "auth_method": {
             "type": "str",
-            "default": "cli",
+            "default": None,
             "choices": ["cli", "client_credentials", "access_token"],
         },
         "client_id": {"type": "str", "no_log": False},

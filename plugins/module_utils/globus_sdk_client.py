@@ -193,10 +193,18 @@ class GlobusSDKClient(GlobusModuleBase):
                 msg="No globus-cli tokens found. Run 'globus login' first to authenticate."
             )
 
-        # Determine namespace from environment
+        # Determine namespace from environment and profile
+        # globus-cli stores tokens under userprofile/<environment>/<profile>
+        # or userprofile/<profile> for production with custom profiles
         environment = os.environ.get("GLOBUS_SDK_ENVIRONMENT", "production")
         profile = os.environ.get("GLOBUS_PROFILE", "")
-        namespace = f"userprofile/{environment}" + (f"/{profile}" if profile else "")
+
+        if profile:
+            # Non-production environments with a profile: userprofile/<environment>/<profile>
+            namespace = f"userprofile/{environment}/{profile}"
+        else:
+            # Default profile: userprofile/<environment>
+            namespace = f"userprofile/{environment}"
 
         # Map services to resource servers
         resource_servers = {
@@ -327,9 +335,28 @@ class GlobusSDKClient(GlobusModuleBase):
         if hasattr(error, "text"):
             try:
                 error_data = json.loads(error.text)
-                error_code = error_data.get("error", {}).get("code")
-                error_detail = error_data.get("error", {}).get("detail")
-            except (json.JSONDecodeError, TypeError):
+
+                # Handle multiple response formats:
+                # Format 1: {"error": {"code": "...", "detail": "..."}}
+                # Format 2: {"error": "string_code", "error_description": "..."}
+                # Format 3: {"errors": [{"code": "...", "detail": "..."}]}
+                error_field = error_data.get("error")
+                if isinstance(error_field, dict):
+                    error_code = error_field.get("code")
+                    error_detail = error_field.get("detail")
+                elif isinstance(error_field, str):
+                    error_code = error_field.upper()
+                    error_detail = error_data.get("error_description")
+
+                # Also check the "errors" array (common in newer API responses)
+                if not error_detail:
+                    errors_list = error_data.get("errors", [])
+                    if errors_list and isinstance(errors_list, list):
+                        first_error = errors_list[0]
+                        if isinstance(first_error, dict):
+                            error_code = error_code or first_error.get("code")
+                            error_detail = first_error.get("detail")
+            except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 
         # Build user-friendly message

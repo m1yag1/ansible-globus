@@ -167,7 +167,7 @@ def test_globus_argument_spec():
     # Check defaults and choices
     assert spec["state"]["default"] == "present"
     assert spec["state"]["choices"] == ["present", "absent"]
-    assert spec["auth_method"]["default"] == "cli"
+    assert spec["auth_method"]["default"] is None
     assert spec["auth_method"]["choices"] == [
         "cli",
         "client_credentials",
